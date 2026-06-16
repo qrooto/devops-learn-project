@@ -1,0 +1,31 @@
+# ArgoCD Application — описывает что деплоить и откуда.
+#
+# ArgoCD следит за этим манифестом и за папкой в Git.
+# При любом изменении в Git → ArgoCD применяет изменения в кластер.
+# Это и есть GitOps: Git — единственный источник правды о состоянии кластера.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bulletin-board
+  namespace: argocd
+spec:
+  project: default
+
+  # Откуда брать манифесты
+  source:
+    repoURL: https://github.com/YOUR_USERNAME/devops-project.git  # ЗАМЕНИ
+    targetRevision: main
+    path: level-5-kubernetes/k8s    # папка с K8s манифестами
+
+  # Куда деплоить
+  destination:
+    server: https://kubernetes.default.svc   # текущий кластер
+    namespace: bulletin-board
+
+  syncPolicy:
+    automated:
+      prune: true      # удалять ресурсы которых нет в Git
+      selfHeal: true   # восстанавливать если кто-то изменил кластер вручную
+    syncOptions:
+      - CreateNamespace=true

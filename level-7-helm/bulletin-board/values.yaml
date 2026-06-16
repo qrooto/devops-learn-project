@@ -1,0 +1,38 @@
+# Значения по умолчанию. Переопределяй через --set или -f values-prod.yaml
+
+backend:
+  image:
+    repository: bulletin-board-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 3
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+postgres:
+  image: postgres:16-alpine
+  database: bulletin_board
+  user: postgres
+  password: postgres   # в production замени на Kubernetes Secret из внешнего хранилища
+  storage: 1Gi
+
+redis:
+  image: redis:7-alpine
+
+nginx:
+  image: nginx:alpine
+  service:
+    type: NodePort
+    nodePort: 30080
+
+namespace: bulletin-board
+
+# Настройки для blue-green деплоя
+blueGreen:
+  enabled: false
+  activeSlot: blue   # blue или green — куда направлен трафик

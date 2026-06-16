@@ -1,0 +1,41 @@
+# Promtail — агент который собирает логи и отправляет в Loki.
+# Аналогия: Prometheus scrape-ит метрики, Promtail scrape-ит логи.
+# Разница: метрики — числа, логи — строки с контекстом.
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  # Запоминает до какого места прочитал файл — чтобы не перечитывать при рестарте
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Собираем логи всех Docker-контейнеров через /var/lib/docker/containers
+  - job_name: containers
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker_logs
+          __path__: /var/lib/docker/containers/*/*-json.log
+
+    pipeline_stages:
+      # Парсим JSON-формат логов Docker
+      - json:
+          expressions:
+            log:    log
+            stream: stream
+            time:   time
+      # Используем время из Docker как метку времени в Loki
+      - timestamp:
+          source: time
+          format: RFC3339Nano
+      # Переименовываем поле log в output
+      - output:
+          source: log
+      # Добавляем имя контейнера как label
+      - docker: {}

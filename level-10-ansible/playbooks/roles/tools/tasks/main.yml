@@ -1,0 +1,32 @@
+---
+# Установка DevOps-инструментов: k6, kubectl, helm.
+
+- name: Add k6 GPG key
+  apt_key:
+    url: https://dl.k6.io/key.gpg
+    keyring: /usr/share/keyrings/k6-archive-keyring.gpg
+    state: present
+
+- name: Add k6 repository
+  apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main"
+    filename: k6
+    state: present
+
+- name: Install k6
+  apt:
+    name: k6
+    update_cache: true
+    state: present
+
+- name: Install kubectl
+  get_url:
+    url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl"
+    dest: /usr/local/bin/kubectl
+    mode: '0755'
+
+- name: Install Helm
+  shell: |
+    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  args:
+    creates: /usr/local/bin/helm   # не выполнять если helm уже есть (идемпотентность)

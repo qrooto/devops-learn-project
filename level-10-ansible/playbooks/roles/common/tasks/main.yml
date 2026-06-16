@@ -1,0 +1,43 @@
+---
+# Базовая настройка системы: пакеты, таймзона, пользователь.
+
+- name: Update apt cache
+  apt:
+    update_cache: true
+    cache_valid_time: 3600   # не обновлять если кэш свежее 1 часа
+
+- name: Install base packages
+  apt:
+    name:
+      - curl
+      - wget
+      - git
+      - htop
+      - vim
+      - unzip
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - python3-pip
+    state: present
+
+- name: Set timezone to Europe/Moscow
+  community.general.timezone:
+    name: Europe/Moscow
+
+- name: Create deploy user
+  user:
+    name: deploy
+    groups: sudo
+    shell: /bin/bash
+    create_home: true
+    state: present
+  tags: user
+
+- name: Add SSH key to deploy user
+  authorized_key:
+    user: deploy
+    state: present
+    key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+  tags: user
+  ignore_errors: true   # ключа может не быть на машине разработчика

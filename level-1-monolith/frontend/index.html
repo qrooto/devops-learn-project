@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Доска объявлений</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Доска объявлений</h1>
+      <div id="authStatus"></div>
+    </header>
+
+    <div id="authBlock" class="card">
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('login')">Войти</button>
+        <button class="tab" onclick="switchTab('register')">Регистрация</button>
+      </div>
+      <form id="loginForm">
+        <input type="text" id="loginUsername" placeholder="Имя пользователя" required>
+        <input type="password" id="loginPassword" placeholder="Пароль" required>
+        <button type="submit">Войти</button>
+      </form>
+      <form id="registerForm" style="display:none">
+        <input type="text" id="regUsername" placeholder="Имя пользователя" required>
+        <input type="email" id="regEmail" placeholder="Email" required>
+        <input type="password" id="regPassword" placeholder="Пароль" required>
+        <button type="submit">Зарегистрироваться</button>
+      </form>
+      <p id="authError" class="error"></p>
+    </div>
+
+    <div id="createBlock" class="card" style="display:none">
+      <h2>Новое объявление</h2>
+      <form id="adForm">
+        <input type="text" id="title" placeholder="Заголовок" required>
+        <textarea id="description" placeholder="Описание" required></textarea>
+        <input type="number" id="price" placeholder="Цена (₽)" required min="0">
+        <button type="submit">Опубликовать</button>
+      </form>
+    </div>
+
+    <div id="adsList"></div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

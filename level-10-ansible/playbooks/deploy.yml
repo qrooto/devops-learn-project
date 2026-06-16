@@ -1,0 +1,15 @@
+---
+# Отдельный плейбук только для деплоя приложения.
+# Запуск: ansible-playbook playbooks/deploy.yml -e "app_level=level-2-scaling"
+
+- name: Deploy application
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    app_level: "level-1-monolith"
+    github_username: "{{ lookup('env', 'GITHUB_USERNAME') | default('change-me') }}"
+
+  roles:
+    - role: app

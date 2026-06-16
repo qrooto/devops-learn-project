@@ -1,0 +1,7 @@
+---
+# Переменные роли app.
+# Переопределяй в inventory/group_vars/ или через -e при запуске.
+
+app_repo: "https://github.com/{{ github_username }}/devops-project.git"
+app_dir: "/home/{{ ansible_user }}/devops-project"
+app_level: "level-1-monolith"   # какой уровень запускать

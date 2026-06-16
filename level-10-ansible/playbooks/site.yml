@@ -1,0 +1,32 @@
+---
+# Главный плейбук. Запускается командой:
+# ansible-playbook playbooks/site.yml
+#
+# Для конкретного хоста:
+# ansible-playbook playbooks/site.yml -l webservers
+#
+# Для конкретного тега:
+# ansible-playbook playbooks/site.yml --tags docker
+
+- name: Configure all servers
+  hosts: all
+  become: true   # выполнять как root (sudo)
+  gather_facts: true   # собрать информацию о хосте: ОС, IP, CPU, RAM...
+
+  vars:
+    kubectl_version: "v1.31.0"
+    github_username: "{{ lookup('env', 'GITHUB_USERNAME') | default('change-me') }}"
+
+  roles:
+    - role: common
+      tags: [common, base]
+
+    - role: docker
+      tags: [docker]
+
+    - role: tools
+      tags: [tools, k6, kubectl, helm]
+
+    - role: app
+      tags: [app, deploy]
+      when: deploy_app | default(false) | bool

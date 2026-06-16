@@ -1,0 +1,41 @@
+---
+# Плейбук для проверки состояния серверов.
+# Показывает: ОС, память, диск, запущен ли Docker.
+# Запуск: ansible-playbook playbooks/check.yml
+
+- name: Check server status
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: Show OS info
+      debug:
+        msg: "{{ inventory_hostname }}: {{ ansible_distribution }} {{ ansible_distribution_version }}, kernel {{ ansible_kernel }}"
+
+    - name: Show RAM
+      debug:
+        msg: "RAM: {{ (ansible_memtotal_mb / 1024) | round(1) }} GB total, {{ (ansible_memfree_mb / 1024) | round(1) }} GB free"
+
+    - name: Show disk usage on /
+      debug:
+        msg: "Disk /: {{ ansible_mounts | selectattr('mount', 'equalto', '/') | map(attribute='size_available') | first | filesizeformat }} free"
+
+    - name: Check Docker is running
+      command: docker info
+      register: docker_info
+      changed_when: false
+      failed_when: false
+
+    - name: Docker status
+      debug:
+        msg: "Docker: {{ 'running' if docker_info.rc == 0 else 'NOT running' }}"
+
+    - name: List running containers
+      command: docker ps --format "table {{ '{{' }}.Names{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}"
+      register: containers
+      changed_when: false
+      failed_when: false
+
+    - name: Running containers
+      debug:
+        var: containers.stdout_lines

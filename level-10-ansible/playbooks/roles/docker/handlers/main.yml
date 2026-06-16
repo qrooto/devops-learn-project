@@ -1,0 +1,8 @@
+---
+# Handlers — задачи которые выполняются ТОЛЬКО если что-то изменилось.
+# Запускаются один раз в конце play, даже если notify вызвали несколько раз.
+
+- name: Restart Docker
+  service:
+    name: docker
+    state: restarted

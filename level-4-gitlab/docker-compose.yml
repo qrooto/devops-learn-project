@@ -1,0 +1,48 @@
+# GitLab CE + GitLab Runner
+#
+# Требования к VM: минимум 4GB RAM (рекомендуется 6-8GB), 10GB диска.
+# Первый запуск: GitLab стартует 3-5 минут — это нормально.
+#
+# ВАЖНО: перед запуском отключи docker compose из level-1..3 если они
+# используют порт 80, либо поменяй GITLAB_PORT ниже.
+
+services:
+  gitlab:
+    image: gitlab/gitlab-ce:17.5.2-ce.0
+    hostname: 'gitlab.local'
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://localhost:8929'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+        # Отключаем тяжёлые компоненты для учебной среды
+        prometheus_monitoring['enable'] = false
+        grafana['enable'] = false
+        alertmanager['enable'] = false
+        gitlab_exporter['enable'] = false
+        node_exporter['enable'] = false
+        redis_exporter['enable'] = false
+        postgres_exporter['enable'] = false
+    ports:
+      - '8929:8929'   # HTTP (не 80 чтобы не конфликтовать с nginx)
+      - '2222:22'     # SSH для git push/pull
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+    restart: unless-stopped
+    shm_size: '256m'
+
+  gitlab-runner:
+    image: gitlab/gitlab-runner:latest
+    restart: unless-stopped
+    volumes:
+      - gitlab_runner_config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - gitlab
+
+volumes:
+  gitlab_config:
+  gitlab_logs:
+  gitlab_data:
+  gitlab_runner_config:

@@ -1,0 +1,36 @@
+# Статическая конфигурация Traefik.
+# Меняется редко — только при смене архитектуры.
+# Динамическая конфигурация (маршруты) берётся из Docker labels.
+
+api:
+  dashboard: true          # UI на порту 8080
+  insecure: true           # НЕ использовать в prod без auth
+
+log:
+  level: INFO
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    exposedByDefault: false  # контейнер видит Traefik только если есть label traefik.enable=true
+    network: bridge
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: your@email.com      # ЗАМЕНИ на свой email
+      storage: /certs/acme.json  # Traefik хранит сертификаты здесь
+      httpChallenge:
+        entryPoint: web           # Let's Encrypt проверяет домен через HTTP на порту 80
+
+  # Для локального тестирования используй self-signed:
+  # selfSigned:
+  #   tls:
+  #     certificates:
+  #       - certFile: /certs/cert.pem
+  #         keyFile: /certs/key.pem

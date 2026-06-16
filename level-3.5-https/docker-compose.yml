@@ -1,0 +1,76 @@
+# Уровень 3.5 — HTTPS с Traefik
+#
+# Traefik заменяет Nginx как точку входа.
+# Он умеет автоматически получать и обновлять TLS-сертификаты от Let's Encrypt.
+#
+# ВАЖНО для prod:
+#   1. Заменить example.com на реальный домен
+#   2. Домен должен резолвиться на IP этой машины
+#   3. Порты 80 и 443 должны быть доступны из интернета
+#
+# Для локального тестирования используем self-signed сертификат (см. README).
+
+services:
+  traefik:
+    image: traefik:v3.2
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"   # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # Traefik читает labels контейнеров
+      - ./traefik.yml:/traefik.yml:ro
+      - ./certs:/certs                                  # для self-signed или acme.json
+    command:
+      - "--configFile=/traefik.yml"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: bulletin_board
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ../level-1-monolith/backend
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/bulletin_board
+      SECRET_KEY: "change-me-in-production-use-env-secrets"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Traefik labels — описывают как маршрутизировать трафик к этому сервису
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`example.com`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls=true"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ../level-1-monolith/frontend:/usr/share/nginx/html
+      - ./nginx/static.conf:/etc/nginx/conf.d/default.conf
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`example.com`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls=true"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      # Редирект HTTP → HTTPS
+      - "traefik.http.routers.frontend-http.rule=Host(`example.com`)"
+      - "traefik.http.routers.frontend-http.entrypoints=web"
+      - "traefik.http.routers.frontend-http.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+
+volumes:
+  postgres_data:

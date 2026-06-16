@@ -1,0 +1,67 @@
+# Фрагмент конфигурации Alertmanager для отправки вебхуков AI-агенту.
+#
+# Добавь этот receiver в level-6-monitoring/alertmanager/alertmanager.yml
+# и подключи его к нужным маршрутам.
+#
+# ВАЖНО: agent:8080 доступен внутри Docker-сети level-6-monitoring_default.
+# Убедись что ai-agent подключён к этой сети (см. docker-compose.yml уровня 6.5).
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: [alertname, job]
+  group_wait: 30s        # Ждём 30 сек — вдруг другие алерты из той же группы
+  group_interval: 5m     # Не слать дубликаты чаще чем раз в 5 минут
+  repeat_interval: 4h    # Повторить если алерт не прошёл через 4 часа
+
+  routes:
+    # Критические алерты → сразу в AI-агент
+    - match:
+        severity: critical
+      receiver: ai-agent
+      group_wait: 10s    # Для критических ждём меньше
+
+    # Warning → тоже в агент, но не так срочно
+    - match:
+        severity: warning
+      receiver: ai-agent
+
+receivers:
+  - name: default
+    # Можно добавить email, slack и т.д. как fallback
+
+  - name: ai-agent
+    webhook_configs:
+      - url: 'http://ai-agent:8080/webhook'
+        send_resolved: false   # Не отправляем resolved — агент только диагностирует firing
+        http_config:
+          # В production добавь аутентификацию:
+          # bearer_token: <secret>
+          # или basic_auth: {username: ..., password: ...}
+
+# ── Пример создания alertmanager.yml с нуля ────────────────────────────────────
+#
+# Если в level-6-monitoring ещё нет Alertmanager:
+#
+# 1. Добавь в level-6-monitoring/docker-compose.yml:
+#
+#   alertmanager:
+#     image: prom/alertmanager:v0.27.0
+#     container_name: alertmanager
+#     volumes:
+#       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+#     command:
+#       - '--config.file=/etc/alertmanager/alertmanager.yml'
+#     ports:
+#       - "9093:9093"
+#
+# 2. Добавь в level-6-monitoring/prometheus/prometheus.yml:
+#
+#   alerting:
+#     alertmanagers:
+#       - static_configs:
+#           - targets: ['alertmanager:9093']
+#
+# 3. Скопируй этот файл как level-6-monitoring/alertmanager/alertmanager.yml

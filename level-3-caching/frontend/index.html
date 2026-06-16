@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Доска объявлений</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Доска объявлений</h1>
+
+    <div class="card">
+      <h2>Новое объявление</h2>
+      <form id="adForm">
+        <input type="text" id="title" placeholder="Заголовок" required>
+        <textarea id="description" placeholder="Описание" required></textarea>
+        <input type="number" id="price" placeholder="Цена (₽)" required min="0">
+        <input type="text" id="author" placeholder="Ваше имя" required>
+        <button type="submit">Опубликовать</button>
+      </form>
+    </div>
+
+    <div id="adsList"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

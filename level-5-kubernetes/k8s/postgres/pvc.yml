@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: bulletin-board
+spec:
+  accessModes:
+    - ReadWriteOnce       # один Pod может читать/писать одновременно
+  resources:
+    requests:
+      storage: 1Gi

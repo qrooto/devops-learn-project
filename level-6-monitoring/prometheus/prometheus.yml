@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s       # как часто собирать метрики
+  evaluation_interval: 15s   # как часто вычислять alert-rules
+
+scrape_configs:
+  # Сам Prometheus собирает метрики о себе
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Метрики с бэкенд-инстансов
+  - job_name: 'backend'
+    static_configs:
+      - targets:
+          - 'backend_1:8000'
+          - 'backend_2:8000'
+          - 'backend_3:8000'
+    metrics_path: /metrics
+
+  # Метрики с cAdvisor — CPU/RAM/сеть контейнеров
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']

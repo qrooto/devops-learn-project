@@ -1,0 +1,34 @@
+---
+# Деплой приложения: клонирование репозитория и запуск через docker compose.
+
+- name: Clone / update repository
+  git:
+    repo: "{{ app_repo }}"
+    dest: "{{ app_dir }}"
+    version: main
+    update: true     # если уже клонирован — делает git pull
+  become_user: "{{ ansible_user }}"
+
+- name: Copy .env if not exists
+  template:
+    src: env.j2
+    dest: "{{ app_dir }}/{{ app_level }}/.env"
+    force: false   # не перезаписывать если файл уже есть
+  ignore_errors: true
+
+- name: Stop running compose stack (if any)
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_dir }}/{{ app_level }}"
+    state: absent
+  ignore_errors: true
+
+- name: Start application with docker compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_dir }}/{{ app_level }}"
+    build: always
+    state: present
+  register: compose_result
+
+- name: Show running containers
+  debug:
+    var: compose_result

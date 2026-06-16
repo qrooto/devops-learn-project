@@ -1,0 +1,31 @@
+services:
+  agent:
+    build: ./agent
+    container_name: ai-agent
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:8080"     # Alertmanager шлёт вебхуки сюда
+    volumes:
+      # Docker socket нужен для команд restart.
+      # ro = read-only по умолчанию для безопасности, но restart требует write.
+      # Альтернатива: docker.sock proxy (Tecnativa/docker-socket-proxy) — ограничивает API
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - agent_net
+      - monitoring_net    # Shared с level-6-monitoring для доступа к Prometheus/Loki
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  agent_net:
+    driver: bridge
+
+  monitoring_net:
+    # Подключаемся к сети level-6-monitoring чтобы достучаться до Prometheus и Loki
+    # Имя сети = <папка>_default при запуске через docker compose
+    external: true
+    name: level-6-monitoring_default

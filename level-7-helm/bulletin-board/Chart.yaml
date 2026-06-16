@@ -1,0 +1,6 @@
+apiVersion: v2
+name: bulletin-board
+description: Доска объявлений — полный стек с бэкендом, PostgreSQL, Redis и Nginx
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

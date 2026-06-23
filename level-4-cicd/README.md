@@ -143,6 +143,122 @@ curl http://ВАШ-IP/api/health
 
 ---
 
+## Шаг 4.5 — Сканирование образов на уязвимости (Trivy)
+
+Тесты проверяют что **наш код** работает правильно. Но Docker-образ — это ещё и базовый образ (`python:3.12-slim`), системные библиотеки (openssl, libz, glibc), Python-пакеты (requests, sqlalchemy). В любом из них могут быть **известные уязвимости** (CVE).
+
+Без сканирования ты можешь деплоить образ с дырой уровня CRITICAL и не знать об этом неделями.
+
+**Trivy** — open-source сканер от Aqua Security. Проверяет: базовый образ, системные пакеты, Python/Node/Go зависимости, конфиги (Dockerfile, Kubernetes YAML). Самый популярный инструмент в этой нише.
+
+### Что такое CVE
+
+CVE (Common Vulnerabilities and Exposures) — база данных известных уязвимостей с ID и оценкой серьёзности (CVSS 0-10):
+
+| Уровень | CVSS | Что значит |
+|---------|------|-----------|
+| CRITICAL | 9.0-10.0 | Можно эксплуатировать удалённо без авторизации |
+| HIGH | 7.0-8.9 | Серьёзная, требует внимания |
+| MEDIUM | 4.0-6.9 | Можно мониторить, патчить при возможности |
+| LOW | 0.1-3.9 | Информационные |
+
+### Практика
+
+**Шаг 1 — Установить Trivy локально**
+
+```bash
+# Ubuntu/Debian:
+sudo apt-get install -y wget apt-transport-https gnupg
+wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key \
+  | sudo gpg --dearmor -o /usr/share/keyrings/trivy.gpg
+echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" \
+  | sudo tee /etc/apt/sources.list.d/trivy.list
+sudo apt-get update && sudo apt-get install -y trivy
+
+trivy --version
+```
+
+**Шаг 2 — Просканировать образ**
+
+```bash
+# Сначала собираем образ:
+docker build -t bulletin-backend:local ./level-3-caching/backend/
+
+# Полный скан:
+trivy image bulletin-backend:local
+```
+
+**Что увидишь:**
+```
+bulletin-backend:local (debian 12.x)
+=====================================
+Total: 18 (HIGH: 2, MEDIUM: 10, LOW: 6)
+
+┌──────────────────────┬────────────────┬──────────┬────────────────────┬
+│ Library              │ Vulnerability  │ Severity │ Installed Version  │
+├──────────────────────┼────────────────┼──────────┼────────────────────┤
+│ libssl3              │ CVE-2024-5535  │ HIGH     │ 3.0.11-1~deb12u2   │
+│ python3.12-minimal   │ CVE-2024-6923  │ HIGH     │ 3.12.2-1           │
+│ libc-bin             │ CVE-2024-2961  │ MEDIUM   │ 2.36-9+deb12u4     │
+└──────────────────────┴────────────────┴──────────┴────────────────────┘
+```
+
+**Шаг 3 — Только HIGH и CRITICAL с exit code**
+
+```bash
+# В CI нас волнуют только серьёзные:
+trivy image --severity HIGH,CRITICAL bulletin-backend:local
+
+# Выйти с кодом 1 если найдены CRITICAL:
+trivy image \
+  --severity CRITICAL \
+  --exit-code 1 \
+  --ignore-unfixed \
+  bulletin-backend:local
+
+echo "Exit code: $?"
+# 0 = нет CRITICAL  → деплой продолжается
+# 1 = есть CRITICAL → CI упадёт, деплоя не будет
+```
+
+`--ignore-unfixed` важен: большинство уязвимостей не имеют исправления (апстрим ещё не выпустил патч). Блокировать деплой из-за них неразумно.
+
+**Шаг 4 — Добавить в GitHub Actions workflow**
+
+Открой `.github/workflows/deploy.yml` — уже добавлен job `scan` между `build` и `deploy`:
+
+```bash
+cat level-4-cicd/.github/workflows/deploy.yml | grep -A 20 "scan:"
+```
+
+**Шаг 5 — Уменьшить количество уязвимостей**
+
+Самый простой способ — обновить базовый образ и системные пакеты:
+
+```dockerfile
+# В Dockerfile добавить после RUN pip install:
+RUN apt-get update && apt-get upgrade -y \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+```
+
+```bash
+# Пересобрать и сравнить:
+docker build -t bulletin-backend:patched ./level-3-caching/backend/
+trivy image --severity HIGH,CRITICAL bulletin-backend:patched
+
+# Количество HIGH уменьшится — системные пакеты обновились
+```
+
+Другой подход: переключиться на образ с актуальными патчами:
+```dockerfile
+FROM python:3.12-slim-bookworm  # Debian Bookworm с последними патчами
+```
+
+**Что важно понять:** полностью убрать все уязвимости невозможно — базовый образ обновляется постепенно. Цель — отсутствие CRITICAL и мониторинг HIGH.
+
+---
+
 ## Шаг 5 — Сломать намеренно (CI должен остановить деплой)
 
 Это главный урок уровня: CI — это страховка.
@@ -236,6 +352,184 @@ cat level-4-cicd/tests/test_api.py
 
 ---
 
+## Шаг 8.5 — Zero-downtime миграции базы данных
+
+CI/CD автоматизирует деплой кода. Но есть часть деплоя которую часто делают неправильно: **миграции схемы базы данных**.
+
+Вот типичная ситуация: добавляешь обязательное поле `image_url` к таблице `ads`. Пишешь миграцию:
+
+```python
+# Alembic migration
+op.add_column('ads', sa.Column('image_url', sa.String(500), nullable=False, server_default=''))
+```
+
+На базе с 50 строками — мгновенно. На базе с **10 миллионами строк** — PostgreSQL заблокирует таблицу `ads` на несколько минут пока переписывает каждую строку. Всё это время `GET /api/ads` возвращает 500. Сервис лежит.
+
+Это называется **blocking migration** — и это одна из самых частых причин инцидентов при деплое.
+
+### Как это работает
+
+PostgreSQL использует блокировки при изменении схемы таблицы:
+
+```
+ALTER TABLE ads ADD COLUMN image_url VARCHAR NOT NULL DEFAULT ''
+    ↓
+ACCESS EXCLUSIVE LOCK на таблицу ads
+    ↓
+PostgreSQL переписывает каждую строку (в PG10 и ниже)
+    ↓
+Все SELECT и INSERT ждут
+    ↓
+Таблица разблокируется
+```
+
+В PostgreSQL 11+ `ADD COLUMN NOT NULL DEFAULT constant` оптимизировали — стало мгновенным. Но другие операции до сих пор блокируют:
+
+| Операция | Блокирует? | Безопасная альтернатива |
+|----------|-----------|------------------------|
+| `ADD COLUMN NULL` | Нет | — |
+| `ADD COLUMN NOT NULL DEFAULT` | Нет (PG11+) / Да (PG10-) | Expand-Contract |
+| `CREATE INDEX` | Да | `CREATE INDEX CONCURRENTLY` |
+| `ALTER COLUMN TYPE` | Да | Expand-Contract |
+| `ADD CONSTRAINT CHECK` | Да | `ADD CONSTRAINT NOT VALID` → `VALIDATE` |
+| `DROP COLUMN` | Нет | — |
+
+### Паттерн: Expand → Backfill → Contract
+
+Любую опасную миграцию разбивают на несколько безопасных шагов — каждый деплоится отдельно:
+
+```
+Деплой 1 (Expand):
+  ADD COLUMN image_url VARCHAR NULL     ← без NOT NULL, без DEFAULT, мгновенно
+
+Деплой 1 (Backfill — можно в том же деплое или отдельный job):
+  UPDATE ads SET image_url = '' WHERE image_url IS NULL  ← батчами, не блокируем
+
+Деплой 2 (Contract):
+  ALTER COLUMN image_url SET NOT NULL  ← уже безопасно: null строк нет
+```
+
+Аналогия: не перекрываешь единственную дорогу пока строишь новую. Сначала строишь рядом → открываешь → закрываешь старую.
+
+### Практика
+
+**Шаг 1 — Увидеть блокировку**
+
+```bash
+cd level-4-cicd
+docker compose up -d
+
+# Терминал 1: следим за блокировками во время миграции
+watch -n 0.5 'docker compose exec postgres psql -U postgres -d bulletin_board -t -c "
+SELECT pid, state, wait_event_type, wait_event, left(query, 60)
+FROM pg_stat_activity WHERE state != '"'"'idle'"'"' ORDER BY query_start;"'
+
+# Терминал 2: запускаем опасную миграцию
+docker compose exec postgres psql -U postgres -d bulletin_board -c "
+  ALTER TABLE ads ADD COLUMN image_url VARCHAR(500) NOT NULL DEFAULT '';
+"
+```
+
+На маленькой базе не почувствуешь разницы. Смысл — понять **механизм**: блокировка существует, на большой базе она длится минуты.
+
+**Шаг 2 — Безопасная миграция по шагам**
+
+```bash
+# ШАГ 1 (Expand): добавляем nullable — мгновенно, без блокировки
+docker compose exec postgres psql -U postgres -d bulletin_board -c "
+  ALTER TABLE ads ADD COLUMN image_url_v2 VARCHAR(500) NULL;
+"
+# На 10M строк — <1ms
+
+# ШАГ 2 (Backfill): заполняем данные батчами
+# В production делают по 1000 строк с паузами чтобы не перегружать репликацию
+docker compose exec postgres psql -U postgres -d bulletin_board -c "
+  UPDATE ads SET image_url_v2 = '' WHERE image_url_v2 IS NULL;
+"
+
+# Проверяем что нет NULL:
+docker compose exec postgres psql -U postgres -d bulletin_board -c "
+  SELECT count(*) FROM ads WHERE image_url_v2 IS NULL;
+"
+# count: 0  ← можно переходить к Contract
+
+# ШАГ 3 (Contract): теперь безопасно установить NOT NULL
+docker compose exec postgres psql -U postgres -d bulletin_board -c "
+  ALTER TABLE ads ALTER COLUMN image_url_v2 SET NOT NULL;
+"
+# На 10M строк — <1ms (не переписывает строки, только меняет метаданные)
+
+# Проверяем результат:
+docker compose exec postgres psql -U postgres -d bulletin_board -c "\d ads"
+```
+
+**Шаг 3 — Безопасное создание индексов**
+
+Создание индекса — ещё одна опасная операция. Обычный `CREATE INDEX` блокирует таблицу на время сборки. `CREATE INDEX CONCURRENTLY` — строит индекс без блокировки, таблица доступна для чтения и записи:
+
+```bash
+# ОПАСНО — блокирует таблицу:
+docker compose exec postgres psql -U postgres -d bulletin_board -c "
+  CREATE INDEX idx_ads_price ON ads(price);
+"
+
+# БЕЗОПАСНО — без блокировки:
+docker compose exec postgres psql -U postgres -d bulletin_board -c "
+  CREATE INDEX CONCURRENTLY idx_ads_price_safe ON ads(price);
+"
+
+# В Alembic:
+# op.create_index('idx_ads_price', 'ads', ['price'], postgresql_concurrently=True)
+```
+
+Минус `CONCURRENTLY`: нельзя запускать внутри транзакции. В Alembic нужно:
+```python
+with op.get_context().autocommit_block():
+    op.create_index('idx_ads_price', 'ads', ['price'], postgresql_concurrently=True)
+```
+
+**Шаг 4 — Добавить в Alembic**
+
+В реальных проектах Expand-Contract — это три отдельные миграции с осознанным деплоем:
+
+```python
+# migrations/002_add_image_url_expand.py — деплой 1
+def upgrade():
+    # Только nullable: мгновенно, безопасно
+    op.add_column('ads', sa.Column('image_url', sa.String(500), nullable=True))
+
+def downgrade():
+    op.drop_column('ads', 'image_url')
+```
+
+```python
+# migrations/003_backfill_image_url.py — деплой 1 (или data migration job)
+def upgrade():
+    # Заполняем DEFAULT для существующих строк
+    op.execute("UPDATE ads SET image_url = '' WHERE image_url IS NULL")
+
+def downgrade():
+    pass  # данные нельзя "откатить"
+```
+
+```python
+# migrations/004_add_image_url_not_null.py — деплой 2 (после backfill)
+def upgrade():
+    # Теперь безопасно — нет NULL строк
+    op.alter_column('ads', 'image_url', nullable=False)
+
+def downgrade():
+    op.alter_column('ads', 'image_url', nullable=True)
+```
+
+**Ключевые вопросы перед каждой миграцией:**
+1. Блокирует ли эта операция таблицу?
+2. Сколько строк затронет? (10M строк = проблема)
+3. Можно ли разбить на безопасные шаги?
+4. Есть ли бэкап перед деплоем?
+
+---
+
 ## Типичные ошибки
 
 **"SSH: Permission denied"** → Проверь что `~/.ssh/deploy_key.pub` добавлен в `~/.ssh/authorized_keys` на сервере. Права: `chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys`.
@@ -264,6 +558,15 @@ A: Никогда не в коде. GitHub Actions: Settings → Secrets. GitLab
 
 **Q: Что такое артефакт в CI/CD?**
 A: Файл созданный в одном job и переданный в следующий. Например: test coverage report, собранный Docker image, jar-файл. В GitHub Actions — `actions/upload-artifact` и `download-artifact`.
+
+**Q: Что такое CVE и зачем сканировать Docker-образы?**
+A: CVE (Common Vulnerabilities and Exposures) — база данных известных уязвимостей с оценкой CVSS 0-10. Docker-образ содержит базовый образ и зависимости — в любом из них может быть дыра. Trivy сканирует образ и сравнивает с CVE-базой. Деплой образа с CRITICAL уязвимостью без ведома — это риск который можно автоматически исключить одним шагом в CI.
+
+**Q: Что такое blocking migration и как её избежать?**
+A: Blocking migration — операция ALTER TABLE которая берёт ACCESS EXCLUSIVE LOCK и блокирует все запросы к таблице. На большой таблице это может длиться минуты. Решение: паттерн Expand-Contract: 1) ADD COLUMN NULL (мгновенно), 2) backfill данных батчами, 3) SET NOT NULL (мгновенно). Для индексов — `CREATE INDEX CONCURRENTLY`.
+
+**Q: Почему `CREATE INDEX CONCURRENTLY` лучше `CREATE INDEX` в production?**
+A: `CREATE INDEX` берёт блокировку на таблицу — все INSERT/UPDATE ждут пока строится индекс (минуты на большой таблице). `CREATE INDEX CONCURRENTLY` строит индекс в несколько проходов без блокировки — таблица доступна всё время. Минус: нельзя запускать в транзакции и строится вдвое медленнее.
 
 ---
 
@@ -357,6 +660,8 @@ docker run --rm ghcr.io/user/bulletin-board:latest ls -la /app | grep env
 - [ ] `.dockerignore` исключает `.env` и секретные файлы
 - [ ] Rolling update — нулевой даунтайм подтверждён нагрузочным тестом
 - [ ] SSH-доступ для деплоя — от непривилегированного пользователя, не root
+- [ ] Trivy scan добавлен в pipeline — CI останавливается при CRITICAL уязвимостях
+- [ ] Понимаешь разницу между blocking и non-blocking миграцией — можешь объяснить паттерн Expand-Contract
 
 ---
 

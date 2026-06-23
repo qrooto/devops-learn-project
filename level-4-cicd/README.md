@@ -287,3 +287,168 @@ git add level-4-cicd/
 git commit -m "level-4: ci/cd with github actions and rolling update"
 git push origin main
 ```
+
+---
+
+## Security Block: Уровень 4
+
+### Секреты в CI/CD — главная боль
+
+**1. GitHub Secrets — единственный правильный способ**
+
+GitHub Actions имеет доступ к переменным через `${{ secrets.NAME }}`. Secrets зашифрованы, не видны в логах (заменяются на `***`), не видны другим пользователям репозитория.
+
+Никогда не делай так:
+```yaml
+# ПЛОХО — пароль виден в коде и логах:
+- run: ssh root@1.2.3.4 -p "mypassword123" "docker compose up -d"
+```
+
+**2. Принцип минимальных привилегий для deploy key**
+
+Deploy key — отдельный SSH-ключ только для деплоя. Причина: если скомпрометируют pipeline, атакующий получает только deploy key. Отзываешь его — доступ потерян. Основной ключ остаётся нетронутым.
+
+Deploy-пользователь на сервере должен иметь минимальные права:
+- Доступ к папке проекта
+- Права запускать `docker` команды
+- НЕ нужен `sudo` для деплоя (организуй через группу docker)
+
+**3. Образы с тегами commit SHA — аудит деплоев**
+
+`ghcr.io/user/app:a1b2c3d` позволяет точно знать что сейчас запущено в production. `latest` — не позволяет. При инциденте вопрос "какая версия кода работала в 14:32?" решается за секунду.
+
+**4. Проверь что в образ не попали секреты**
+
+`.dockerignore` должен исключать `.env`, `*.key`, `credentials.*`. Иначе они попадут в слой образа который загружается в публичный registry.
+
+```bash
+# Проверить что .env не в образе:
+docker run --rm ghcr.io/user/bulletin-board:latest ls -la /app | grep env
+# Не должно быть .env файла
+```
+
+**5. Сканирование образов на уязвимости**
+
+В реальных командах CI включает сканирование Docker-образа перед деплоем:
+
+```yaml
+# Добавить в pipeline (Trivy — популярный инструмент):
+- name: Scan image
+  uses: aquasecurity/trivy-action@master
+  with:
+    image-ref: ghcr.io/${{ github.actor }}/bulletin-board:${{ github.sha }}
+    severity: 'HIGH,CRITICAL'
+    exit-code: '1'  # упасть при критических уязвимостях
+```
+
+⚠️ **Антипаттерны:**
+
+- **Секреты в `env:` в yaml-файле workflow** — даже если файл приватный, при merge fork-а PR атакующий может попытаться прочитать переменные через специально созданные шаги. Всегда используй `secrets.`.
+- **Деплоить от root по SSH** — `ssh root@server "docker compose up"`. Если pipeline скомпрометирован — атакующий получает root на сервере. Используй непривилегированного пользователя в группе `docker`.
+
+---
+
+## Best Practices Checklist
+
+- [ ] Все секреты (SSH ключ, пароли, токены) хранятся в GitHub Secrets, не в yaml
+- [ ] Deploy key — отдельный ключ, не основной
+- [ ] Pipeline не деплоит при провале тестов — проверено намеренной поломкой
+- [ ] Образы тегируются commit SHA, не только `latest`
+- [ ] `.dockerignore` исключает `.env` и секретные файлы
+- [ ] Rolling update — нулевой даунтайм подтверждён нагрузочным тестом
+- [ ] SSH-доступ для деплоя — от непривилегированного пользователя, не root
+
+---
+
+## Troubleshooting: Уровень 4
+
+### Проблемы с CI/CD pipeline
+
+**1. SSH деплой не работает: `Permission denied (publickey)`**
+
+Симптом: job `deploy` падает с ошибкой SSH.
+
+```bash
+# На сервере проверяем authorized_keys:
+cat ~/.ssh/authorized_keys
+# Там должен быть deploy_key.pub
+
+# Проверяем права:
+ls -la ~/.ssh/
+# .ssh должно быть 700, authorized_keys — 600
+
+# Проверяем что sshd принимает ключи:
+sudo grep -E "PubkeyAuthentication|AuthorizedKeysFile" /etc/ssh/sshd_config
+
+# Ручная проверка подключения с локальной машины тем же ключом:
+ssh -i ~/.ssh/deploy_key devops@<IP> -v 2>&1 | tail -20
+# Смотри строки "Offering public key" и "Accepted"
+```
+
+**2. Workflow не запускается после push**
+
+Симптом: пушишь, во вкладке Actions ничего нового.
+
+```bash
+# Проверяем триггеры в deploy.yml:
+grep -A 5 "^on:" .github/workflows/deploy.yml
+# on: push: branches: [main]
+
+# Может пушишь в другую ветку:
+git branch
+# * feature/something   ← не main, workflow не сработает
+
+# Проверь что файл workflow в правильном месте:
+ls .github/workflows/
+```
+
+**3. Docker push в ghcr.io: `denied: permission_denied`**
+
+Симптом: job `build` падает при `docker push`.
+
+```bash
+# В GitHub Actions нужен GITHUB_TOKEN или PAT с правом write:packages
+# Проверяем в deploy.yml:
+grep -A 3 "ghcr.io" .github/workflows/deploy.yml
+# Должно быть: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ...
+
+# GITHUB_TOKEN автоматически доступен в Actions без настройки
+# Но нужно разрешить пакеты в настройках репо:
+# Settings → Actions → General → Workflow permissions → Read and write
+```
+
+**4. Rolling update вызывает всплеск 502**
+
+Симптом: во время деплоя k6 показывает ошибки.
+
+```bash
+# На сервере смотрим nginx логи в момент деплоя:
+docker compose logs nginx | grep -E "502|upstream|connect"
+
+# Причина: nginx не успел узнать что инстанс остановлен
+# Решение в nginx.conf:
+cat nginx/nginx.conf | grep -A 5 "proxy_next_upstream"
+# Должно быть: proxy_next_upstream error timeout;
+# И: proxy_connect_timeout 2s;
+
+# Проверить что healthcheck настроен в docker-compose.yml:
+grep -A 5 "healthcheck" docker-compose.yml
+```
+
+**5. Тесты падают в CI но работают локально**
+
+Симптом: `pytest` в GitHub Actions падает, у тебя локально проходит.
+
+```bash
+# Запусти тесты в той же среде что CI (чистый Ubuntu-контейнер):
+docker run --rm -v $(pwd):/app -w /app python:3.11-slim bash -c \
+  "pip install -r level-4-cicd/backend/requirements.txt && pytest level-4-cicd/tests/"
+
+# Частые причины:
+# 1. Разные версии Python (проверь в deploy.yml: python-version)
+# 2. Переменные окружения не установлены (в CI нет .env файла)
+# 3. Зависимость от внешнего сервиса без мока (PostgreSQL не поднят в CI)
+
+# Смотрим полный вывод CI в логах Actions:
+# Вкладка Actions → конкретный запуск → job test → шаг Run tests
+```

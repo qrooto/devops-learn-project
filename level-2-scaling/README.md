@@ -298,3 +298,148 @@ git add level-2-scaling/
 git commit -m "level-2: horizontal scaling with nginx load balancer"
 git push origin main
 ```
+
+---
+
+## Security Block: Уровень 2
+
+### Что важно при масштабировании
+
+**1. Единый SECRET_KEY для всех инстансов**
+
+Это одновременно и техническая необходимость, и security-момент. `SECRET_KEY` одинаковый — хорошо для JWT. Но это значит что если скомпрометировать любой один инстанс и достать переменную окружения — ты знаешь ключ для подделки токенов всех пользователей.
+
+В production `SECRET_KEY` берётся из secrets manager (Vault, AWS Secrets Manager), не хранится в `docker-compose.yml`.
+
+**2. PostgreSQL по-прежнему недоступен снаружи**
+
+При масштабировании соблазн открыть порт postgres "для удобства диагностики". Не делай этого. Диагностируй через `docker compose exec postgres psql ...` — он работает изнутри Docker-сети без проброса порта.
+
+**3. Изоляция сетей**
+
+В идеале backend и postgres должны быть в разных Docker-сетях: backend → внешняя сеть → может принимать трафик из nginx. postgres → только внутренняя сеть → доступен только backend. В нашем `docker-compose.yml` все сервисы в одной сети — это нормально для учёбы.
+
+**4. `proxy_next_upstream non_idempotent` — осторожно**
+
+В учебных целях мы разрешили Nginx пересылать POST-запросы на следующий инстанс при ошибке. В production это опасно: POST-запрос (создание объявления) может выполниться дважды. Для идемпотентных запросов (GET) — безопасно. Для POST/PUT — только если у тебя есть защита от дублирования.
+
+**5. Rate limiting в Nginx**
+
+На этом уровне его нет. В production Nginx должен ограничивать количество запросов с одного IP чтобы защититься от DoS и брутфорса:
+
+```nginx
+# Пример rate limiting (добавить в будущем):
+limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+limit_req zone=api burst=20 nodelay;
+```
+
+⚠️ **Антипаттерны:**
+
+- **Разные SECRET_KEY на инстансах** — пользователи будут случайно получать 401 при каждом третьем запросе (когда попадают на "чужой" инстанс). Трудно дебажить потому что ошибка нестабильная.
+- **Пробросить порт PostgreSQL для "удобства"** (`ports: "5432:5432"` в docker-compose) — база становится доступна всему интернету на IP-адресе сервера.
+
+---
+
+## Best Practices Checklist
+
+- [ ] `SECRET_KEY` одинаковый для всех трёх инстансов — создание токена на одном, проверка на другом работает
+- [ ] PostgreSQL порт не пробрасывается на хост
+- [ ] `healthcheck` в postgres-сервисе настроен — `docker compose ps` показывает `(healthy)`
+- [ ] `proxy_next_upstream` настроен — Nginx переключается при падении инстанса
+- [ ] Все три инстанса видны в `docker compose ps` как `Up`
+- [ ] Убил один инстанс во время нагрузки — сервис продолжил работу
+
+---
+
+## Troubleshooting: Уровень 2
+
+### Проблемы с балансировкой и несколькими инстансами
+
+**1. Все запросы идут на один инстанс**
+
+Симптом: `curl http://localhost/api/instance` всегда возвращает один и тот же `instance_id`.
+
+```bash
+# Проверяем upstream в конфиге:
+cat nginx/nginx.conf | grep -A 10 "upstream"
+
+# Проверяем что все три инстанса запущены:
+docker compose ps
+
+# Смотрим логи nginx на предмет ошибок upstream:
+docker compose logs nginx | grep -E "upstream|error|failed"
+
+# Если инстанс помечен как unavailable — перезапусти его:
+docker compose restart backend_2
+```
+
+**2. JWT ошибка: `Invalid signature` или `Could not validate credentials`**
+
+Симптом: логинишься, получаешь токен, следующий запрос (на другой инстанс) даёт 401.
+
+```bash
+# Это почти всегда разные SECRET_KEY
+# Проверяем значения у всех инстансов:
+docker compose exec backend_1 env | grep SECRET_KEY
+docker compose exec backend_2 env | grep SECRET_KEY
+docker compose exec backend_3 env | grep SECRET_KEY
+# Должны быть одинаковые
+
+# Если разные — исправь docker-compose.yml и пересоздай контейнеры:
+docker compose up -d --force-recreate
+```
+
+**3. Один инстанс постоянно падает, остальные работают**
+
+Симптом: `docker compose ps` показывает `Restarting` у backend_2, остальные `Up`.
+
+```bash
+# Смотрим только логи проблемного инстанса:
+docker compose logs backend_2
+
+# Проверяем ресурсы — может не хватать памяти:
+docker stats backend_2
+
+# Типичная причина: миграция применилась дважды или конфликт
+# Попробуй пересоздать только этот контейнер:
+docker compose up -d --force-recreate backend_2
+```
+
+**4. PostgreSQL деградирует под нагрузкой**
+
+Симптом: при нагрузочном тесте время ответа растёт, `docker stats` показывает высокий CPU у postgres.
+
+```bash
+# Смотрим активные запросы к PostgreSQL в реальном времени:
+docker compose exec postgres psql -U postgres -d bulletin_board \
+  -c "SELECT pid, state, query_start, left(query, 80) as query FROM pg_stat_activity WHERE state != 'idle' ORDER BY query_start;"
+
+# Количество соединений по состоянию:
+docker compose exec postgres psql -U postgres -d bulletin_board \
+  -c "SELECT state, count(*) FROM pg_stat_activity GROUP BY state;"
+
+# Долгоиграющие запросы (больше 5 секунд):
+docker compose exec postgres psql -U postgres -d bulletin_board \
+  -c "SELECT pid, now() - query_start as duration, left(query, 80) FROM pg_stat_activity WHERE state = 'active' AND now() - query_start > interval '5 seconds';"
+```
+
+**5. Nginx возвращает 504 Gateway Timeout**
+
+Симптом: некоторые запросы зависают и возвращают 504.
+
+```bash
+# 504 = nginx дождался ответа от backend дольше timeout
+# Смотрим логи nginx:
+docker compose logs nginx | grep 504
+
+# Проверяем что все backend отвечают локально:
+docker compose exec nginx curl -s http://backend_1:8000/api/health
+docker compose exec nginx curl -s http://backend_2:8000/api/health
+docker compose exec nginx curl -s http://backend_3:8000/api/health
+
+# Если один не отвечает — смотрим его логи:
+docker compose logs backend_2
+
+# Временно увеличить timeout в nginx.conf (proxy_read_timeout):
+# proxy_read_timeout 60s;
+```

@@ -342,3 +342,171 @@ git add level-1-monolith/
 git commit -m "level-1: monolith with jwt auth and alembic migrations"
 git push origin main
 ```
+
+---
+
+## Security Block: Уровень 1
+
+### Что мы применили
+
+**1. Non-root пользователь в контейнере** (`Dockerfile`: `RUN useradd ... && USER appuser`)
+
+Если атакующий найдёт уязвимость в приложении и получит выполнение кода внутри контейнера — он окажется пользователем `appuser` без прав. Не root. Это не панацея (container escape существует), но обязательная базовая практика.
+
+**2. Секреты через переменные окружения, не в коде**
+
+`SECRET_KEY`, `DATABASE_URL` — в `docker-compose.yml` через `environment:`, не захардкожены в `main.py`. Причина: код попадает в git, git попадает на GitHub. Секрет в коде = секрет в публичном репозитории навсегда (даже если удалишь — он остаётся в истории коммитов).
+
+**3. JWT — stateless аутентификация**
+
+Сервер не хранит сессии в памяти. Токен подписан и содержит всё необходимое. Нет хранилища сессий = нет точки отказа и нет данных которые можно украсть из памяти процесса.
+
+**4. PostgreSQL недоступен снаружи**
+
+В `docker-compose.yml` у postgres нет секции `ports:` — значит порт 5432 не проброшен на хост. База доступна только внутри Docker-сети между контейнерами.
+
+**5. Принцип Least Privilege для базы данных**
+
+Идеальный вариант (для самостоятельного улучшения): создавать отдельного PostgreSQL-пользователя с правами только на `SELECT/INSERT/UPDATE/DELETE` для конкретной базы. Сейчас мы используем суперпользователя `postgres` — это нормально для учёбы, но не для production.
+
+### Как это улучшить в production
+
+```sql
+-- Создать пользователя приложения с минимальными правами
+CREATE USER app_user WITH PASSWORD 'strong_password';
+GRANT CONNECT ON DATABASE bulletin_board TO app_user;
+GRANT USAGE ON SCHEMA public TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app_user;
+-- app_user не может DROP TABLE, CREATE TABLE, создавать других пользователей
+```
+
+⚠️ **Антипаттерны:**
+
+- **Запускать контейнер от root** — `USER root` в Dockerfile или его отсутствие. Большинство базовых образов запускаются от root по умолчанию. Всегда явно добавляй `USER`.
+- **Хранить `SECRET_KEY` в коде** — например, `SECRET_KEY = "mysecret123"` прямо в `main.py`. Если репозиторий публичный — это немедленная компрометация. Даже в приватном — это плохая практика: секрет должен быть отделён от кода.
+
+---
+
+## Best Practices Checklist
+
+Пройдись после завершения уровня:
+
+- [ ] Контейнер не запускается от root — `docker compose exec backend whoami` возвращает не `root`
+- [ ] Порт PostgreSQL не проброшен на хост — `ss -tulpn | grep 5432` на сервере пуст
+- [ ] `SECRET_KEY` не захардкожен в коде — только через переменную окружения
+- [ ] JWT не содержит пароль или другие секреты в payload — проверь декодированием
+- [ ] Миграции применяются автоматически, руками `CREATE TABLE` не делается
+- [ ] `.dockerignore` существует и исключает `.env`, `*.log`, `.git`
+- [ ] Версии образов в `docker-compose.yml` закреплены (не `latest`)
+
+---
+
+## Troubleshooting: Уровень 1
+
+### Общая диагностика Docker
+
+```bash
+# Статус всех контейнеров:
+docker compose ps
+
+# Логи конкретного сервиса (последние 50 строк):
+docker compose logs --tail=50 backend
+
+# Логи в реальном времени:
+docker compose logs -f backend
+
+# Потребление ресурсов:
+docker stats
+
+# Зайти внутрь контейнера:
+docker compose exec backend bash
+```
+
+### Типичные проблемы
+
+**1. Контейнер постоянно перезапускается (Restarting)**
+
+Симптом: `docker compose ps` показывает статус `Restarting` или `Exit 1`.
+
+```bash
+# Смотри логи — там будет ошибка:
+docker compose logs backend
+
+# Частая причина: бэкенд стартует раньше PostgreSQL
+# Смотри: "could not connect to server" или "Connection refused"
+docker compose logs postgres
+
+# Решение: подождать или перезапустить только упавший сервис:
+docker compose restart backend
+```
+
+**2. Nginx отдаёт 502 Bad Gateway**
+
+Симптом: открываешь браузер, видишь 502.
+
+```bash
+# 502 = Nginx не может достучаться до бэкенда
+# Проверяем запущен ли бэкенд:
+docker compose ps
+
+# Смотрим логи nginx — там будет "connect() failed":
+docker compose logs nginx
+
+# Смотрим логи бэкенда:
+docker compose logs backend
+
+# Проверяем отвечает ли бэкенд изнутри Docker-сети:
+docker compose exec nginx curl http://backend:8000/api/health
+```
+
+**3. "Authentication required" — 401 на все запросы**
+
+Симптом: curl возвращает `{"detail":"Authentication required"}` даже с токеном.
+
+```bash
+# Проверяем что токен передаётся:
+curl -v http://localhost/api/ads -H "Authorization: Bearer $TOKEN" 2>&1 | grep -E "Authorization|401"
+
+# Декодируем payload токена — не истёк ли:
+echo $TOKEN | cut -d'.' -f2 | base64 -d 2>/dev/null | python3 -m json.tool
+# Смотри поле "exp" — это Unix timestamp. Сравни с date +%s
+
+# Если SECRET_KEY изменили — все старые токены невалидны, нужно перелогиниться
+```
+
+**4. PostgreSQL не запускается**
+
+Симптом: `docker compose logs postgres` показывает ошибки.
+
+```bash
+# Смотрим логи базы:
+docker compose logs postgres
+
+# Частая причина: volume с поломанными данными
+# Ядерный вариант — удалить volume и начать чисто (ДАННЫЕ УДАЛЯТСЯ):
+docker compose down -v
+docker compose up -d
+
+# Проверяем что база живая:
+docker compose exec postgres pg_isready -U postgres
+# /var/run/postgresql:5432 - accepting connections
+```
+
+**5. Миграции не применились**
+
+Симптом: `curl http://localhost/api/ads` возвращает ошибку про несуществующую таблицу.
+
+```bash
+# Проверяем что entrypoint.sh отработал:
+docker compose logs backend | grep -E "migration|alembic|error"
+
+# Запустить миграции вручную:
+docker compose exec backend alembic upgrade head
+
+# Проверить текущую версию:
+docker compose exec backend alembic current
+
+# Посмотреть таблицы в базе:
+docker compose exec postgres psql -U postgres -d bulletin_board -c "\dt"
+```

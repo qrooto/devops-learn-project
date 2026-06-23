@@ -305,3 +305,180 @@ git add level-3-caching/
 git commit -m "level-3: redis caching with cache invalidation"
 git push origin main
 ```
+
+---
+
+## Security Block: Уровень 3
+
+### Redis — открытый по умолчанию
+
+Redis спроектирован для использования в доверенной сети и по умолчанию не требует пароля. Это хорошо для разработки, но опасно в production.
+
+**Почему Redis нужен пароль:**
+Без пароля любой кто добрался до сети где живёт Redis может:
+- Читать все закэшированные данные (потенциально чувствительные)
+- Выполнить `FLUSHALL` и обнулить кэш
+- В старых версиях Redis — выполнить произвольные команды на хосте через `CONFIG SET`
+
+**Как добавить пароль Redis:**
+
+```yaml
+# docker-compose.yml:
+redis:
+  image: redis:7-alpine
+  command: redis-server --requirepass ${REDIS_PASSWORD}
+  environment:
+    - REDIS_PASSWORD=${REDIS_PASSWORD}
+```
+
+```python
+# backend/main.py:
+cache = redis.Redis(host='redis', port=6379, password=os.getenv('REDIS_PASSWORD'))
+```
+
+```bash
+# .env файл (не коммитить в git!):
+REDIS_PASSWORD=your_strong_password_here
+```
+
+**Redis не должен быть доступен снаружи**
+
+Как и PostgreSQL — Redis не должен иметь проброшенных портов. В нашем compose у Redis нет `ports:` — верно. Если когда-то добавишь для отладки — убери перед деплоем.
+
+**`FLUSHALL` — только в разработке**
+
+`FLUSHALL` удаляет все ключи из Redis. В production это означает потерю всего кэша одной командой — всплеск нагрузки на PostgreSQL. Используй только в dev. В production для очистки конкретного ключа: `DEL ads:list`.
+
+**Ограничение памяти Redis**
+
+Без `maxmemory` Redis будет расти пока не съест всю RAM сервера. В production обязательно:
+
+```
+# redis.conf или command:
+maxmemory 256mb
+maxmemory-policy allkeys-lru
+```
+
+`allkeys-lru` — при нехватке памяти удаляет давно неиспользуемые ключи. Это нормальное поведение кэша.
+
+⚠️ **Антипаттерны:**
+
+- **Redis без пароля в production** — при компрометации любого контейнера в той же сети атакующий получает полный доступ к кэшу (и к данным которые в нём хранятся).
+- **`FLUSHALL` в скриптах деплоя** — некоторые добавляют его "для надёжности" при деплое. Это вызывает thundering herd: все запросы сразу идут в PostgreSQL.
+
+---
+
+## Best Practices Checklist
+
+- [ ] Redis не имеет проброшенного порта на хост (`ss -tulpn | grep 6379` пуст)
+- [ ] `FLUSHALL` вызывается только руками при разработке, не в скриптах
+- [ ] `maxmemory` настроен хотя бы для понимания ограничений
+- [ ] Инвалидация кэша работает — создал объявление, `KEYS *` в redis-cli показывает пустой список
+- [ ] Hit rate выше 80% при нормальной нагрузке — `curl /api/cache-stats`
+- [ ] Индексы в PostgreSQL созданы — `EXPLAIN ANALYZE` показывает `Index Scan`, не `Seq Scan`
+- [ ] `log_min_duration_statement` возвращён в нормальное значение после отладки (0ms = логировать всё = замедляет базу)
+
+---
+
+## Troubleshooting: Уровень 3
+
+### Проблемы с Redis и кэшированием
+
+**1. Redis не отвечает / Connection refused**
+
+Симптом: `docker compose exec redis redis-cli ping` возвращает ошибку или бэкенд падает с `ConnectionRefusedError`.
+
+```bash
+# Проверяем запущен ли Redis:
+docker compose ps redis
+
+# Смотрим логи Redis:
+docker compose logs redis
+
+# Проверяем ping изнутри бэкенда:
+docker compose exec backend_1 python3 -c "import redis; r=redis.Redis(host='redis'); print(r.ping())"
+
+# Если не запускается — проверяем что нет конфликта портов:
+ss -tulpn | grep 6379
+```
+
+**2. Кэш не инвалидируется — старые данные после изменений**
+
+Симптом: создал объявление, обновил страницу — нового объявления нет (или удалил — оно всё ещё видно).
+
+```bash
+# Следим за Redis командами в реальном времени:
+docker compose exec redis redis-cli monitor
+
+# В другом терминале делаем операцию (POST /api/ads):
+# В monitor должен появиться DEL ads:list
+
+# Если DEL не появляется — смотрим код create_ad():
+docker compose exec backend_1 grep -A 5 "cache.delete" /app/main.py
+
+# Принудительно сбросить кэш для диагностики:
+docker compose exec redis redis-cli DEL ads:list
+```
+
+**3. Низкий hit rate (меньше 50%)**
+
+Симптом: `curl /api/cache-stats` показывает `hit_rate_percent: 30`.
+
+```bash
+# Смотрим TTL — возможно слишком маленький:
+docker compose exec redis redis-cli TTL ads:list
+# Если 1-2 — кэш протухает раньше чем успевают прийти повторные запросы
+
+# Статистика Redis:
+docker compose exec redis redis-cli INFO stats | grep -E "hits|misses"
+# keyspace_hits: сколько раз нашли ключ
+# keyspace_misses: сколько раз не нашли
+
+# Проверяем что кэш вообще пишется:
+docker compose exec redis redis-cli KEYS '*'
+# Если пусто при работающем приложении — SETEX не вызывается
+```
+
+**4. Redis занял слишком много памяти**
+
+Симптом: `docker stats` показывает что redis контейнер потребляет несколько GB.
+
+```bash
+# Текущее использование памяти:
+docker compose exec redis redis-cli INFO memory | grep -E "used_memory_human|maxmemory"
+
+# Сколько ключей в Redis и какого типа:
+docker compose exec redis redis-cli INFO keyspace
+docker compose exec redis redis-cli DBSIZE
+
+# Найти самые большие ключи:
+docker compose exec redis redis-cli --bigkeys
+
+# Установить лимит без перезапуска:
+docker compose exec redis redis-cli CONFIG SET maxmemory 256mb
+docker compose exec redis redis-cli CONFIG SET maxmemory-policy allkeys-lru
+```
+
+**5. PostgreSQL медленно работает несмотря на кэш**
+
+Симптом: высокий CPU у postgres, медленные запросы даже при хорошем hit rate.
+
+```bash
+# Включаем логирование медленных запросов (>100ms):
+docker compose exec postgres psql -U postgres -c "ALTER SYSTEM SET log_min_duration_statement = 100;"
+docker compose exec postgres psql -U postgres -c "SELECT pg_reload_conf();"
+
+# Смотрим какие запросы медленные:
+docker compose logs postgres | grep "duration" | sort -t':' -k2 -rn | head -10
+
+# Проверяем план конкретного запроса:
+docker compose exec postgres psql -U postgres -d bulletin_board -c "
+EXPLAIN (ANALYZE, BUFFERS) SELECT a.id, a.title, a.price, u.username
+FROM ads a LEFT JOIN users u ON a.user_id = u.id
+ORDER BY a.created_at DESC LIMIT 20;"
+# Ищи: Index Scan (хорошо) vs Seq Scan (плохо, нужен индекс)
+
+# Статистика использования индексов:
+docker compose exec postgres psql -U postgres -d bulletin_board -c "
+SELECT relname, idx_scan, seq_scan FROM pg_stat_user_tables ORDER BY seq_scan DESC;"
+```

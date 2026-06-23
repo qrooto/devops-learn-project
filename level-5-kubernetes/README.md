@@ -458,3 +458,224 @@ git add level-5-kubernetes/
 git commit -m "level-5: kubernetes manifests with hpa and probes"
 git push origin main
 ```
+
+---
+
+## Security Block: Уровень 5
+
+### Kubernetes — новая поверхность атаки
+
+**1. Secrets НЕ зашифрованы по умолчанию**
+
+Kubernetes Secret хранит данные в base64 — это кодирование, не шифрование. Любой кто имеет доступ к etcd (база данных кластера) читает все секреты в открытом виде.
+
+```bash
+# Так выглядит "секрет" в K8s:
+kubectl get secret postgres-secret -n bulletin-board -o yaml
+# data:
+#   password: cGFzc3dvcmQxMjM=   ← это просто base64
+
+# Декодируется за секунду:
+echo "cGFzc3dvcmQxMjM=" | base64 -d
+# password123
+```
+
+В production используй:
+- **Sealed Secrets** — зашифрованные секреты которые можно коммитить в git
+- **External Secrets Operator** — синхронизация из Vault/AWS Secrets Manager
+- **Encryption at rest** — шифрование etcd (настройка на уровне кластера)
+
+**2. Non-root контейнеры в K8s**
+
+Dockerfile уже запускает от `appuser`. Но нужно закрепить это на уровне K8s:
+
+```yaml
+# deployment.yml — добавить securityContext:
+spec:
+  containers:
+  - name: backend
+    securityContext:
+      runAsNonRoot: true          # K8s откажет если образ запускается от root
+      runAsUser: 1001             # конкретный UID
+      allowPrivilegeEscalation: false   # нельзя получить больше прав чем имеет процесс
+      readOnlyRootFilesystem: true      # файловая система только для чтения
+```
+
+**3. Resource Limits — это и производительность, и безопасность**
+
+Без `limits` один Pod может съесть всю CPU и RAM ноды. Это не только Performance проблема — это потенциальный вектор DoS изнутри кластера (или при компрометации Pod).
+
+```yaml
+resources:
+  requests:
+    cpu: "100m"     # 0.1 CPU — гарантировано
+    memory: "128Mi"
+  limits:
+    cpu: "500m"     # 0.5 CPU — максимум
+    memory: "512Mi" # при превышении — OOMKill
+```
+
+**4. NetworkPolicy — изоляция на сетевом уровне**
+
+По умолчанию в K8s все Pod-ы могут общаться между собой. PostgreSQL доступен из любого Pod в кластере. NetworkPolicy ограничивает это:
+
+```yaml
+# Пример NetworkPolicy (для самостоятельного изучения):
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-allow-backend
+  namespace: bulletin-board
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: backend   # только Pod-ы с этим label могут подключиться к postgres
+    ports:
+    - port: 5432
+```
+
+**5. RBAC — кто что может делать в кластере**
+
+По умолчанию Pod использует `default` ServiceAccount с широкими правами. В production каждый сервис должен иметь свой ServiceAccount с минимальными правами.
+
+⚠️ **Антипаттерны:**
+
+- **Хранить пароли в ConfigMap** — ConfigMap не предназначен для секретов и не имеет ограничений доступа по умолчанию. Всё что конфиденциально — только в Secret.
+- **Не устанавливать resource limits** — в production это приводит к `OOMKilled` на всей ноде при утечке памяти в одном Pod, что роняет весь сервис.
+
+---
+
+## Best Practices Checklist
+
+- [ ] Все Pod-ы запущены от non-root пользователя — `kubectl exec ... -- whoami` не возвращает `root`
+- [ ] Resource limits установлены для каждого контейнера
+- [ ] readinessProbe и livenessProbe настроены — при убийстве Pod сервис не получает 502
+- [ ] Секреты в K8s Secret, конфиги в ConfigMap — не перепутаны местами
+- [ ] Namespace создан — все ресурсы приложения изолированы от default namespace
+- [ ] HPA работает — под нагрузкой появились новые реплики
+- [ ] Rolling update протестирован — `kubectl rollout undo` делает откат
+
+---
+
+## Troubleshooting: Уровень 5
+
+### Диагностика Kubernetes
+
+Главное правило: **все ответы в `kubectl describe` и `kubectl logs`**.
+
+**1. Pod в статусе `CrashLoopBackOff`**
+
+Симптом: `kubectl get pods -n bulletin-board` показывает `CrashLoopBackOff`. K8s запускает Pod, он падает, K8s ждёт и перезапускает снова.
+
+```bash
+# Смотрим логи — там ошибка:
+kubectl logs <pod-name> -n bulletin-board
+
+# Если Pod уже упал и перезапустился — логи предыдущего запуска:
+kubectl logs <pod-name> -n bulletin-board --previous
+
+# Детальная информация с событиями:
+kubectl describe pod <pod-name> -n bulletin-board
+# Раздел "Events" — там хронология что происходило
+
+# Частые причины CrashLoopBackOff:
+# - Неверные переменные окружения (DATABASE_URL, SECRET_KEY)
+# - PostgreSQL ещё не готов (race condition)
+# - Ошибка в коде приложения при старте
+# - OOMKilled — не хватает памяти
+
+# Если OOMKilled — увеличь memory limit в deployment.yml:
+kubectl describe pod <pod-name> -n bulletin-board | grep -A 3 "OOMKill"
+```
+
+**2. Pod в статусе `ImagePullBackOff`**
+
+Симптом: Pod не запускается, статус `ImagePullBackOff` или `ErrImagePull`.
+
+```bash
+# Детали:
+kubectl describe pod <pod-name> -n bulletin-board
+# В Events: "Failed to pull image ... 404 Not Found"
+# Или: "unauthorized: authentication required"
+
+# Частые причины:
+# 1. Опечатка в имени образа в deployment.yml
+# 2. Образ собран в системном Docker, не в minikube Docker
+# 3. Нет доступа к registry (нужен imagePullSecret)
+
+# Для minikube — пересобери образ в правильном контексте:
+eval $(minikube docker-env)
+docker build -t bulletin-board-backend:latest level-3-caching/backend/
+# Убедись что imagePullPolicy: Never или IfNotPresent в манифесте
+```
+
+**3. Pod в статусе `Pending`**
+
+Симптом: Pod создан но не запускается, статус `Pending` долго.
+
+```bash
+# Детали почему не может запуститься:
+kubectl describe pod <pod-name> -n bulletin-board
+# В Events ищи:
+# "Insufficient memory" — не хватает RAM на ноде
+# "Insufficient cpu" — не хватает CPU
+# "no nodes available" — нет подходящей ноды
+
+# Для minikube — посмотреть ресурсы ноды:
+kubectl describe node minikube | grep -A 10 "Allocated resources"
+
+# Если не хватает ресурсов — увеличь minikube:
+minikube stop
+minikube start --memory=6144 --cpus=4
+
+# Или уменьши requests в deployment.yml:
+# resources.requests.memory: "64Mi"  (было 128Mi)
+```
+
+**4. HPA не масштабирует (показывает `<unknown>/50%`)**
+
+Симптом: `kubectl get hpa -n bulletin-board` показывает `TARGETS: <unknown>/50%`.
+
+```bash
+# Причина: metrics-server не запущен
+kubectl get pods -n kube-system | grep metrics
+
+# Если нет — включить:
+minikube addons enable metrics-server
+
+# Подождать 2-3 минуты и проверить:
+kubectl top pods -n bulletin-board
+# Если ошибка "Metrics API not available" — metrics-server ещё стартует
+
+# Когда заработает:
+kubectl get hpa -n bulletin-board
+# TARGETS: 23%/50% — нормально
+```
+
+**5. Service недоступен — `Connection refused`**
+
+Симптом: `curl` к приложению не работает, хотя Pod-ы запущены.
+
+```bash
+# Проверяем что Service существует:
+kubectl get svc -n bulletin-board
+
+# Проверяем что endpoints есть (Pod-ы подключены к Service):
+kubectl get endpoints -n bulletin-board
+# Если endpoints пустой — label selector в Service не совпадает с label в Pod
+
+# Детали Service:
+kubectl describe svc backend -n bulletin-board
+# Смотри "Selector" и сравни с labels в deployment.yml
+
+# Проверка изнутри кластера:
+kubectl run test-pod --image=curlimages/curl -it --rm -n bulletin-board -- curl http://backend:8000/api/health
+
+# Для minikube — получить URL сервиса:
+minikube service nginx -n bulletin-board --url
+```

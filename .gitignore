@@ -11,6 +11,8 @@ node_modules/
 dist/
 build/
 .pytest_cache/
+.claude/
+CLAUDE.md
 
 # Terraform
 **/.terraform/

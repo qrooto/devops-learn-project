@@ -402,3 +402,140 @@ git add level-7-helm/
 git commit -m "level-7: helm chart with blue-green and canary deploy"
 git push origin main
 ```
+
+---
+
+## Security Block: Уровень 7
+
+### Секреты в Helm — осторожно
+
+**1. Никогда не хранить пароли в `values.yaml`**
+
+`values.yaml` коммитится в git. Если туда попал пароль PostgreSQL или SECRET_KEY — он навсегда в истории репозитория.
+
+Правильный подход:
+```bash
+# Передавать секреты через --set при деплое (они не попадают в git):
+helm upgrade bulletin-board ./bulletin-board/ \
+  --set postgres.password="${POSTGRES_PASSWORD}" \
+  --set backend.secretKey="${SECRET_KEY}"
+
+# Или использовать Helm Secrets (плагин для шифрования values):
+helm plugin install https://github.com/jkroepke/helm-secrets
+```
+
+**2. История релизов хранит секреты в K8s Secrets**
+
+Helm хранит каждую ревизию как Kubernetes Secret в namespace. Если Secret передаёт пароль через `--set` — он есть в этих данных. Для очистки истории:
+```bash
+# Посмотреть helm-секреты:
+kubectl get secrets -l owner=helm -n bulletin-board
+
+# Ограничить историю (хранить последние 5 ревизий):
+helm upgrade ... --history-max=5
+```
+
+**3. Blue-Green: не забудь удалить старый slot**
+
+После переключения трафика на green, blue остаётся запущенным. Если там старая версия с уязвимостью — это лишняя поверхность атаки. Удаляй старый deployment после успешного переключения.
+
+⚠️ **Антипаттерны:**
+
+- **Пароли в `values.yaml`** — даже в приватном репозитории это плохо: CI-системы, коллеги, утечки — и пароль скомпрометирован.
+- **`helm install` с `--debug` в CI** — флаг `--debug` выводит все values в лог включая секреты. Используй только для локальной отладки.
+
+---
+
+## Best Practices Checklist
+
+- [ ] Пароли не в `values.yaml` — передаются через `--set` или Helm Secrets
+- [ ] `helm lint` проходит без предупреждений
+- [ ] `helm template` проверен перед деплоем — нет неожиданных манифестов
+- [ ] Blue-Green: после переключения старый deployment удалён
+- [ ] `--history-max` настроен чтобы helm history не хранился бесконечно
+- [ ] Rollback протестирован — `helm rollback` возвращает предыдущую версию
+
+---
+
+## Troubleshooting: Уровень 7
+
+### Проблемы с Helm
+
+**1. `Error: release already exists`**
+
+```bash
+# Смотрим список релизов:
+helm list -A
+
+# Если хочешь переустановить:
+helm uninstall bulletin-board
+helm install bulletin-board ./bulletin-board/
+
+# Или если хочешь обновить (правильный путь):
+helm upgrade --install bulletin-board ./bulletin-board/
+# --install: установит если не существует, обновит если существует
+```
+
+**2. Шаблон рендерится с ошибкой**
+
+```bash
+# Проверяем без деплоя:
+helm template bulletin-board ./bulletin-board/ 2>&1 | head -30
+
+# Lint (статический анализ):
+helm lint ./bulletin-board/
+
+# Dry run с подробным выводом:
+helm install bulletin-board ./bulletin-board/ --dry-run --debug 2>&1 | grep -E "Error|error"
+
+# Частая ошибка: отступы в шаблонах (YAML чувствителен к пробелам)
+# Проверь конкретный файл:
+helm template ./bulletin-board/ --show-only templates/backend.yaml
+```
+
+**3. Blue-Green: трафик не переключается**
+
+```bash
+# Проверяем selector у Service:
+kubectl get svc backend -n bulletin-board -o jsonpath='{.spec.selector}' | python3 -m json.tool
+
+# Проверяем labels у Pod-ов:
+kubectl get pods -n bulletin-board -l slot=green --show-labels
+
+# Применяем patch вручную:
+kubectl patch service backend -n bulletin-board \
+  -p '{"spec":{"selector":{"slot":"green","app":"backend"}}}'
+
+# Проверяем endpoints (Pod-ы которые получают трафик):
+kubectl get endpoints backend -n bulletin-board
+```
+
+**4. Rollback не работает — Pod-ы не стартуют**
+
+```bash
+# Helm откатил манифесты, но образ может быть недоступен
+helm history bulletin-board
+
+# Посмотреть что Helm пытается применить:
+helm get manifest bulletin-board | grep image
+
+# Если образ удалён из registry — нужно пересобрать:
+eval $(minikube docker-env)
+docker build -t bulletin-board-backend:old-version ../level-3-caching/backend/
+
+# Или откатиться на ревизию где образ точно есть:
+helm rollback bulletin-board 1
+```
+
+**5. Helm values применяются не те**
+
+```bash
+# Посмотреть какие values сейчас у запущенного релиза:
+helm get values bulletin-board
+
+# Посмотреть все values (включая defaults):
+helm get values bulletin-board --all
+
+# Сравнить с тем что ты хочешь:
+helm upgrade bulletin-board ./bulletin-board/ --dry-run | grep replicas
+```

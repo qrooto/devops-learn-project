@@ -190,3 +190,151 @@ git add level-8-gitops/
 git commit -m "level-8: gitops with argocd"
 git push origin main
 ```
+
+---
+
+## Security Block: Уровень 8
+
+### GitOps — безопаснее традиционного CI/CD
+
+**1. Pull-модель: CI не нужен доступ к кластеру**
+
+В классическом CI/CD: runner подключается к кластеру с помощью kubeconfig. Этот файл хранится в CI secrets и если CI скомпрометирован — атакующий получает доступ к кластеру.
+
+В GitOps: ArgoCD живёт **внутри** кластера и сам тянет изменения из Git. CI вообще не знает про кластер — он только пушит код в репозиторий. Это принципиально безопаснее.
+
+**2. RBAC для ArgoCD**
+
+По умолчанию ArgoCD имеет широкие права. В production ограничь:
+```yaml
+# ArgoCD AppProject — ограничить что можно деплоить:
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+spec:
+  destinations:
+  - namespace: bulletin-board   # только в этот namespace
+    server: https://kubernetes.default.svc
+  sourceRepos:
+  - 'https://github.com/твой_юзернейм/devops-project'  # только из этого репо
+```
+
+**3. Смена дефолтного пароля ArgoCD**
+
+ArgoCD генерирует начальный пароль в Secret `argocd-initial-admin-secret`. После первого входа — немедленно меняй:
+```bash
+argocd account update-password \
+  --current-password $(kubectl -n argocd get secret argocd-initial-admin-secret \
+    -o jsonpath="{.data.password}" | base64 -d) \
+  --new-password "YourStrongPassword123!"
+
+# Удали начальный secret:
+kubectl delete secret argocd-initial-admin-secret -n argocd
+```
+
+**4. selfHeal: true — это хорошо для безопасности**
+
+Включённый selfHeal гарантирует что ручные изменения через kubectl не "застрянут" в кластере. Это значит несанкционированные изменения (ошибка, атака) будут автоматически откатаны через несколько минут.
+
+**5. Git как аудит-лог**
+
+Каждое изменение инфраструктуры = коммит с автором и временем. При инциденте легко ответить: "кто и когда изменил количество реплик".
+
+⚠️ **Антипаттерны:**
+
+- **Не менять дефолтный пароль ArgoCD** — `argocd-initial-admin-secret` с захардкоженным паролем это первое что проверяют при атаке на K8s-кластеры.
+- **Открывать ArgoCD UI без TLS на публичный IP** — ArgoCD содержит полный доступ к управлению кластером. Всегда за VPN или с ограниченным доступом.
+
+---
+
+## Best Practices Checklist
+
+- [ ] Пароль ArgoCD изменён с дефолтного
+- [ ] `argocd-initial-admin-secret` удалён после смены пароля
+- [ ] `selfHeal: true` включён — ручные изменения автоматически откатываются
+- [ ] Drift detection протестирован: ручное изменение через kubectl → ArgoCD его откатил
+- [ ] Rollback через `git revert` работает — ArgoCD применил предыдущее состояние
+- [ ] ArgoCD доступен только локально (port-forward), не на публичном порту
+
+---
+
+## Troubleshooting: Уровень 8
+
+### Проблемы с ArgoCD и GitOps
+
+**1. Приложение в статусе `OutOfSync` и не синхронизируется**
+
+```bash
+# Детали расхождения:
+argocd app diff bulletin-board
+
+# Или в UI: Applications → bulletin-board → вкладка Diff
+# Показывает что в Git vs что в кластере
+
+# Принудительная синхронизация:
+argocd app sync bulletin-board
+
+# Если синхронизация зависла:
+argocd app sync bulletin-board --force
+
+# Смотрим события ArgoCD:
+kubectl get events -n argocd --sort-by='.lastTimestamp' | tail -20
+```
+
+**2. `ComparisonError`: ArgoCD не может сравнить состояние**
+
+```bash
+# Смотрим статус приложения:
+argocd app get bulletin-board
+
+# Логи ArgoCD application controller:
+kubectl logs -n argocd deployment/argocd-application-controller | grep -E "error|Error" | tail -20
+
+# Частая причина: нет доступа к репозиторию
+argocd repo list
+# Если статус "Failed" — перепроверь credentials репозитория
+
+# Обновить credentials:
+argocd repo add https://github.com/user/repo --username user --password new_token
+```
+
+**3. Drift: ручное изменение не откатывается**
+
+```bash
+# Проверяем включён ли selfHeal:
+kubectl get application bulletin-board -n argocd -o jsonpath='{.spec.syncPolicy}'
+
+# Если не включён — включить:
+argocd app set bulletin-board --self-heal
+
+# Принудительно откатить до состояния Git:
+argocd app sync bulletin-board --force --prune
+```
+
+**4. ArgoCD не видит новый коммит**
+
+```bash
+# ArgoCD polling — раз в 3 минуты по умолчанию
+# Принудительно обновить:
+argocd app refresh bulletin-board
+
+# Проверить webhook (если настроен):
+kubectl logs -n argocd deployment/argocd-server | grep webhook
+
+# Статус репозитория:
+argocd repo list
+```
+
+**5. Pod-ы не запускаются после синхронизации**
+
+```bash
+# ArgoCD применил манифесты, но Pod-ы падают
+# Проверяем статус в K8s:
+kubectl get pods -n bulletin-board
+kubectl describe pod <имя-pod> -n bulletin-board
+
+# ArgoCD покажет Health: Degraded если Pod-ы не ready
+# В UI → приложение → дерево ресурсов → красные иконки
+
+# Смотрим логи Pod:
+kubectl logs <pod-name> -n bulletin-board --previous
+```

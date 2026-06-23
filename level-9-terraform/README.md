@@ -255,3 +255,162 @@ git add level-9-terraform/
 git commit -m "level-9: terraform infrastructure as code"
 git push origin main
 ```
+
+---
+
+## Security Block: Уровень 9
+
+### State файл — главная security-угроза в Terraform
+
+**1. `terraform.tfstate` никогда не в Git**
+
+State файл содержит все значения ресурсов в открытом виде: пароли PostgreSQL, токены, ключи доступа к облаку. Если он попадёт в публичный репозиторий — это немедленная компрометация.
+
+Добавь в `.gitignore` (уже должно быть в корневом):
+```
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/terraform.tfvars    # если содержит секреты
+```
+
+**2. Remote state с шифрованием**
+
+В production state хранится в облачном хранилище с шифрованием и блокировкой:
+```hcl
+terraform {
+  backend "s3" {
+    bucket         = "terraform-state-prod"
+    key            = "bulletin-board/terraform.tfstate"
+    region         = "eu-central-1"
+    encrypt        = true              # шифрование на стороне S3
+    dynamodb_table = "terraform-lock"  # блокировка от параллельного apply
+  }
+}
+```
+
+Без блокировки два человека могут одновременно запустить `apply` → поврежденный state.
+
+**3. Credentials не в коде**
+
+Никогда не хардкодить access_key/secret_key в `.tf` файлах:
+```hcl
+# ПЛОХО:
+provider "aws" {
+  access_key = "AKIAIOSFODNN7EXAMPLE"
+  secret_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+}
+
+# ХОРОШО — через переменные окружения:
+# export AWS_ACCESS_KEY_ID="..."
+# export AWS_SECRET_ACCESS_KEY="..."
+provider "aws" {}  # Terraform сам подхватит из env
+```
+
+**4. `terraform plan` перед `apply` — всегда**
+
+Plan показывает что изменится. В production план сохраняется в файл и применяется именно он:
+```bash
+terraform plan -out=tfplan     # сохраняем план
+terraform show tfplan          # просматриваем что будет сделано
+terraform apply tfplan         # применяем точно этот план
+```
+
+Это гарантирует что между plan и apply ничего не изменилось.
+
+**5. Принцип минимальных прав для Terraform**
+
+Сервисный аккаунт для Terraform должен иметь права только на нужные ресурсы. Не `AdministratorAccess` — только конкретные разрешения на создание EC2, VPC, RDS.
+
+⚠️ **Антипаттерны:**
+
+- **Коммит `terraform.tfstate` в Git** — даже если репозиторий приватный. Настройки доступа могут измениться, члены команды меняются. State = секреты = не в git.
+- **`terraform destroy` без `plan` в production** — это удаляет ВСЁ что в state. Удаление базы данных с данными — необратимо. Всегда: `plan → review → apply`.
+
+---
+
+## Best Practices Checklist
+
+- [ ] `terraform.tfstate` в `.gitignore` — `git status` не показывает его
+- [ ] Credentials не в `.tf` файлах — через переменные окружения
+- [ ] Команда `terraform plan` запускается перед каждым `apply`
+- [ ] `terraform validate` проходит без ошибок
+- [ ] Remote state настроен (даже если это просто понимание зачем он нужен)
+- [ ] `terraform.tfvars` с секретами в `.gitignore`
+
+---
+
+## Troubleshooting: Уровень 9
+
+### Проблемы с Terraform
+
+**1. `Error: state lock` — state заблокирован**
+
+Симптом: `Error acquiring the state lock: ConditionalCheckFailedException`.
+
+```bash
+# Случается если предыдущий apply упал незавершённым
+# Посмотреть кто держит блокировку:
+terraform force-unlock <LOCK_ID>
+# LOCK_ID есть в тексте ошибки
+
+# В DynamoDB можно посмотреть:
+# aws dynamodb scan --table-name terraform-lock
+```
+
+**2. State расходится с реальностью**
+
+Симптом: `terraform plan` предлагает удалить ресурс который существует, или создать который уже есть.
+
+```bash
+# Обновить state из реального состояния:
+terraform refresh
+
+# Если ресурс создан вне Terraform — импортировать его:
+terraform import docker_container.postgres dev-postgres
+
+# Если ресурс удалён вне Terraform — убрать из state:
+terraform state rm docker_container.postgres
+```
+
+**3. `Error: Provider configuration not present`**
+
+```bash
+# Terraform потерял провайдер — переинициализировать:
+terraform init
+
+# Если директория .terraform повреждена:
+rm -rf .terraform .terraform.lock.hcl
+terraform init
+```
+
+**4. `plan` показывает неожиданные изменения**
+
+Симптом: запускаешь plan — он предлагает пересоздать ресурс который не трогал.
+
+```bash
+# Смотрим детальный diff:
+terraform plan -detailed-exitcode
+
+# Причина часто в изменении аргументов провайдера или версии
+# Смотрим что конкретно изменится:
+terraform plan | grep -A 5 "must be replaced"
+
+# Проверяем версию провайдера:
+terraform version
+cat .terraform.lock.hcl | grep version
+```
+
+**5. `apply` упал на середине**
+
+```bash
+# Terraform частично применил изменения — state может быть неконсистентным
+# Запускаем plan чтобы увидеть текущее состояние:
+terraform plan
+
+# Если план "разумный" — применяем снова:
+terraform apply
+
+# Terraform достаточно умён чтобы не трогать уже созданные ресурсы
+# Он доделает только то что не успел
+```

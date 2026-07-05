@@ -1,0 +1,207 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Теория: алгоритмы балансировки нагрузки",
+    "subtitle": "Round Robin vs Least Connections vs IP Hash — не привязано к проекту",
+    "output": "05-load-balancing-algorithms.html"
+  },
+  "components": [
+    {
+      "id": "c1",
+      "type": "external",
+      "label": "Клиенты",
+      "pos": [
+        40,
+        140
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "lb1",
+      "type": "cloud",
+      "label": "LB: Round Robin",
+      "tag": "по очереди, без учёта нагрузки",
+      "pos": [
+        260,
+        140
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "w1",
+      "type": "backend",
+      "label": "3 воркера",
+      "pos": [
+        520,
+        140
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "c2",
+      "type": "external",
+      "label": "Клиенты",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "lb2",
+      "type": "cloud",
+      "label": "LB: Least Connections",
+      "tag": "туда, где меньше открытых соединений",
+      "pos": [
+        260,
+        340
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "w2",
+      "type": "backend",
+      "label": "3 воркера",
+      "pos": [
+        520,
+        340
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "c3",
+      "type": "external",
+      "label": "Клиенты",
+      "pos": [
+        40,
+        540
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "lb3",
+      "type": "cloud",
+      "label": "LB: IP Hash",
+      "tag": "hash(client IP) → всегда один backend",
+      "pos": [
+        260,
+        540
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "w3",
+      "type": "backend",
+      "label": "3 воркера",
+      "pos": [
+        520,
+        540
+      ],
+      "size": [
+        150,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Round Robin",
+      "wraps": [
+        "lb1",
+        "w1"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Least Connections",
+      "wraps": [
+        "lb2",
+        "w2"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "IP Hash",
+      "wraps": [
+        "lb3",
+        "w3"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "c1",
+      "to": "lb1",
+      "variant": "default"
+    },
+    {
+      "from": "lb1",
+      "to": "w1",
+      "variant": "emphasis"
+    },
+    {
+      "from": "c2",
+      "to": "lb2",
+      "variant": "default"
+    },
+    {
+      "from": "lb2",
+      "to": "w2",
+      "variant": "emphasis"
+    },
+    {
+      "from": "c3",
+      "to": "lb3",
+      "variant": "default"
+    },
+    {
+      "from": "lb3",
+      "to": "w3",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "Round Robin (используется в nginx upstream этого проекта, Level 2 по умолчанию) — самый простой: чередует по очереди, не смотрит, насколько инстанс сейчас загружен",
+        "IP Hash даёт 'sticky sessions' бесплатно — один клиент всегда попадает на один и тот же backend, но при падении этого backend его сессия теряется, а при добавлении/удалении инстансов перераспределение ломает почти все привязки",
+        "Least Connections лучше всего при сильно разном времени обработки запросов, но требует, чтобы LB знал текущее число открытых соединений на каждом backend"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Ещё один вид, который встретится реже",
+      "items": [
+        "DNS round-robin — балансировка через несколько A-записей на один домен, самая грубая: DNS ничего не знает о состоянии backend'ов"
+      ]
+    }
+  ]
+}

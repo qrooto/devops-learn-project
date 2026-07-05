@@ -191,3 +191,17 @@ git add level-3.5-https/
 git commit -m "level-3.5: https with traefik and let's encrypt"
 git push origin main
 ```
+
+---
+
+## Архитектура
+
+- [Концепция: TLS termination в вакууме](../docs/architecture/level-3.5-https/concept.html) — где расшифровывается трафик и что происходит дальше
+- [Реализация: реальный docker-compose.yml](../docs/architecture/level-3.5-https/implementation.html) — Traefik v3.2, ACME, docker-labels для роутинга
+- [Боль → решение: Level 3 → Level 3.5](../docs/architecture/level-3.5-https/pain-solution.html) — было/стало/почему это работает
+- [Сеть: TLS termination на границе VPS](../docs/architecture/level-3.5-https/network.html) — включая антипаттерн этого конфига (Traefik dashboard без аутентификации, published наружу)
+
+**Теория сетей глубже:**
+- [TLS 1.3 handshake](../docs/architecture/networking-theory/06-tls-handshake.html) — что происходит до первого байта приложения, почему SNI виден в открытую даже по HTTPS
+
+Диаграммы — самодостаточные `.html` файлы (переключатель темы, экспорт в PNG/SVG в браузере). GitHub покажет только исходный код — открывай файл локально в браузере.

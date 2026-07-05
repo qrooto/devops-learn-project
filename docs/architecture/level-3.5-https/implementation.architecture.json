@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 3.5 — реальный docker-compose",
+    "subtitle": "Traefik v3.2 заменяет nginx как точку входа, автоматический ACME",
+    "output": "implementation.html"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Браузер",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "letsencrypt",
+      "type": "external",
+      "label": "Let's Encrypt CA",
+      "sublabel": "ACME httpChallenge",
+      "pos": [
+        40,
+        140
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "traefik",
+      "type": "cloud",
+      "label": "traefik:v3.2",
+      "sublabel": ":80 :443 :8080(dashboard)",
+      "tag": "читает labels из docker.sock",
+      "pos": [
+        280,
+        300
+      ],
+      "size": [
+        190,
+        84
+      ]
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "backend",
+      "sublabel": "Host(...) && PathPrefix(/api)",
+      "pos": [
+        560,
+        220
+      ],
+      "size": [
+        190,
+        84
+      ]
+    },
+    {
+      "id": "nginx",
+      "type": "frontend",
+      "label": "nginx (статика)",
+      "sublabel": "Host(`example.com`)",
+      "pos": [
+        560,
+        420
+      ],
+      "size": [
+        180,
+        84
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client",
+      "to": "traefik",
+      "label": "HTTPS :443",
+      "variant": "emphasis",
+      "labelDy": -46
+    },
+    {
+      "from": "client",
+      "to": "traefik",
+      "label": "HTTP :80 → редирект 301",
+      "variant": "dashed",
+      "labelAt": [
+        225,
+        296
+      ]
+    },
+    {
+      "from": "letsencrypt",
+      "to": "traefik",
+      "label": "ACME challenge :80",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "traefik",
+      "to": "backend",
+      "label": "TLS termination → HTTP :8000",
+      "variant": "emphasis",
+      "labelAt": [
+        515,
+        216
+      ]
+    },
+    {
+      "from": "traefik",
+      "to": "nginx",
+      "label": "TLS termination → HTTP :80",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "exposedByDefault: false — контейнер виден Traefik только если явно есть label traefik.enable=true; это осознанный allow-list, а не автообнаружение всего подряд",
+        "certresolver=letsencrypt + httpChallenge на entrypoint web — порт 80 обязателен для выпуска/продления сертификата, даже если весь пользовательский трафик идёт на 443",
+        "redirect-to-https middleware — HTTP-запросы не отклоняются, а редиректятся на HTTPS (301), это стандартный паттерн, а не заглушка"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Что настораживает в этом конфиге",
+      "items": [
+        "api.dashboard: true + insecure: true — dashboard Traefik БЕЗ аутентификации, и порт 8080 published наружу (см. network-схему)"
+      ]
+    }
+  ]
+}

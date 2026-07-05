@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 6 — сетевой путь и антипаттерн этого конфига",
+    "subtitle": "4 новых published-порта — без ufw-ограничений они видны всему интернету",
+    "output": "network.html"
+  },
+  "components": [
+    { "id": "client", "type": "external", "label": "Кто угодно в интернете", "sublabel": "не только ты", "pos": [40, 300], "size": [190, 84] },
+    { "id": "ufw", "type": "security", "label": "ufw", "tag": "ДОЛЖЕН блокировать эти 4 порта", "pos": [300, 300], "size": [190, 84] },
+    { "id": "prometheus", "type": "cloud", "label": "prometheus :9090", "tag": "БЕЗ аутентификации", "pos": [610, 100], "size": [190, 84] },
+    { "id": "grafana", "type": "security", "label": "grafana :3000", "tag": "admin/admin захардкожен в compose", "pos": [610, 240], "size": [200, 84] },
+    { "id": "cadvisor", "type": "cloud", "label": "cadvisor :8080", "tag": "БЕЗ аутентификации", "pos": [610, 380], "size": [190, 84] },
+    { "id": "loki", "type": "database", "label": "loki :3100", "tag": "БЕЗ аутентификации", "pos": [610, 520], "size": [190, 84] }
+  ],
+  "boundaries": [
+    { "kind": "security-group", "label": "docker publish на 0.0.0.0 — все 4 порта потенциально публичные", "wraps": ["prometheus", "grafana", "cadvisor", "loki"] }
+  ],
+  "connections": [
+    { "from": "client", "to": "ufw", "label": "TCP :9090 / :3000 / :8080 / :3100", "variant": "security", "labelDy": -46 },
+    { "from": "ufw", "to": "prometheus", "variant": "security" },
+    { "from": "ufw", "to": "grafana", "variant": "security" },
+    { "from": "ufw", "to": "cadvisor", "variant": "security" },
+    { "from": "ufw", "to": "loki", "variant": "security" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "docker-compose \"ports: '9090:9090'\" по умолчанию биндится на 0.0.0.0 — слушает на ВСЕХ интерфейсах, включая публичный IP VPS. Если ufw не блокирует эти порты явно — Prometheus/Grafana/cAdvisor/Loki доступны всему интернету",
+      "GF_SECURITY_ADMIN_PASSWORD: admin — пароль Grafana захардкожен открытым текстом в docker-compose.yml, нарушение Secrets Management из твоего же CLAUDE.md",
+      "Ни Prometheus, ни cAdvisor, ни Loki в этой конфигурации вообще не имеют аутентификации 'из коробки' — они не рассчитаны на прямой доступ извне"
+    ]},
+    { "dot": "amber", "title": "Как правильно", "items": [
+      "Вариант 1: ufw deny на эти порты для всех, кроме своего IP (или вообще deny, доступ через SSH-туннель: ssh -L 3000:localhost:3000)",
+      "Вариант 2: публиковать как \"127.0.0.1:9090:9090\" — тогда порт вообще не слушает на публичном интерфейсе, только на localhost",
+      "Пароль Grafana — через .env файл или secret, не напрямую в docker-compose.yml"
+    ]}
+  ]
+}

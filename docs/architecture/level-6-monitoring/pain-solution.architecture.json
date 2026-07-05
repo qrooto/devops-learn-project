@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 5 → Level 6: боль и решение",
+    "subtitle": "Было: слепота между инцидентами → Стало: тренды видны за минуты до отказа",
+    "output": "pain-solution.html"
+  },
+  "components": [
+    { "id": "user_b", "type": "external", "label": "Пользователь", "pos": [40, 140], "size": [140, 84] },
+    { "id": "you_b", "type": "backend", "label": "Ты", "tag": "узнаёшь последним, идёшь смотреть docker logs", "pos": [300, 140], "size": [220, 84] },
+
+    { "id": "dashboard_a", "type": "frontend", "label": "Grafana дашборд", "tag": "latency растёт последние 30 мин", "pos": [40, 420], "size": [200, 84] },
+    { "id": "you_a", "type": "backend", "label": "Ты", "tag": "видишь тренд ДО того как упадёт", "pos": [300, 420], "size": [170, 84] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "ДО — Level 5", "wraps": ["you_b"] },
+    { "kind": "region", "label": "ПОСЛЕ — Level 6", "wraps": ["dashboard_a", "you_a"] }
+  ],
+  "connections": [
+    { "from": "user_b", "to": "you_b", "label": "'сайт не работает!' (жалоба)", "variant": "security", "labelDy": -46 },
+    { "from": "dashboard_a", "to": "you_a", "label": "тренд виден заранее", "variant": "emphasis", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Было", "items": [
+      "Проблемы видны только когда пользователь уже написал 'сайт не работает' — реактивный подход, узнаёшь последним"
+    ]},
+    { "dot": "emerald", "title": "Стало", "items": [
+      "Метрики и логи видны в реальном времени на дашборде — latency растёт за 30 минут до реального отказа, есть время среагировать"
+    ]},
+    { "dot": "amber", "title": "Почему это работает", "items": [
+      "Pull-scrape + централизованные логи создают единую точку наблюдения за всей системой, а не разрозненные docker logs по каждому контейнеру"
+    ]}
+  ]
+}

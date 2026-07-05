@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Теория: SSH fan-out и переиспользование соединений",
+    "subtitle": "Один узел управляет многими — не привязано к проекту",
+    "output": "09-ssh-fanout.html"
+  },
+  "components": [
+    { "id": "sshkey", "type": "security", "label": "SSH-ключ control node", "sublabel": "authorized_keys на каждом узле", "pos": [40, 300], "size": [210, 84] },
+    { "id": "control", "type": "cloud", "label": "Control node", "pos": [320, 300], "size": [170, 84] },
+    { "id": "node1", "type": "backend", "label": "Managed node 1", "tag": "ControlPersist держит сессию открытой", "pos": [580, 140], "size": [200, 84] },
+    { "id": "node2", "type": "backend", "label": "Managed node 2", "tag": "ControlPersist держит сессию открытой", "pos": [580, 320], "size": [200, 84] },
+    { "id": "node3", "type": "backend", "label": "Managed node N", "tag": "ControlPersist держит сессию открытой", "pos": [580, 500], "size": [200, 84] }
+  ],
+  "connections": [
+    { "from": "sshkey", "to": "control", "variant": "default" },
+    { "from": "control", "to": "node1", "label": "SSH, параллельно (forks)", "variant": "emphasis" },
+    { "from": "control", "to": "node2", "variant": "default" },
+    { "from": "control", "to": "node3", "variant": "default" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "Один и тот же SSH-ключ control node может быть добавлен в authorized_keys на всех управляемых узлах — не нужен пароль или отдельный ключ на каждый сервер",
+      "SSH ControlMaster/ControlPersist переиспользует уже открытое TCP-соединение для нескольких команд подряд к одному хосту, вместо нового handshake на каждую задачу playbook'а",
+      "Fan-out — архитектурный паттерн 'один узел управляет многими', тот же принцип, что у control plane в Kubernetes, только через SSH, а не через собственный протокол"
+    ]},
+    { "dot": "amber", "title": "Где это в проекте", "items": [
+      "Level 10 — ansible.cfg настраивает forks и таймауты; hosts.ini задаёт список узлов, к которым control node будет подключаться"
+    ]}
+  ]
+}

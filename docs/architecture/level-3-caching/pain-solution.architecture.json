@@ -1,0 +1,235 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 2 → Level 3: боль и решение",
+    "subtitle": "Было: каждый запрос бьёт в postgres → Стало: Redis поглощает большую часть чтений",
+    "output": "pain-solution.html"
+  },
+  "components": [
+    {
+      "id": "client_b",
+      "type": "external",
+      "label": "Клиент",
+      "pos": [
+        40,
+        140
+      ],
+      "size": [
+        110,
+        84
+      ]
+    },
+    {
+      "id": "nginx_b",
+      "type": "cloud",
+      "label": "nginx",
+      "pos": [
+        230,
+        140
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "workers_b",
+      "type": "backend",
+      "label": "3× backend",
+      "sublabel": "round-robin",
+      "pos": [
+        430,
+        140
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "db_b",
+      "type": "database",
+      "label": "postgres",
+      "tag": "SELECT на каждый запрос, задержка растёт",
+      "pos": [
+        660,
+        140
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "client_a",
+      "type": "external",
+      "label": "Клиент",
+      "pos": [
+        40,
+        420
+      ],
+      "size": [
+        110,
+        84
+      ]
+    },
+    {
+      "id": "nginx_a",
+      "type": "cloud",
+      "label": "nginx",
+      "pos": [
+        230,
+        420
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "workers_a",
+      "type": "backend",
+      "label": "3× backend",
+      "sublabel": "round-robin",
+      "pos": [
+        430,
+        420
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "cache_a",
+      "type": "database",
+      "label": "redis",
+      "tag": "HIT: ~1мс, TTL 30s",
+      "pos": [
+        660,
+        300
+      ],
+      "size": [
+        160,
+        84
+      ]
+    },
+    {
+      "id": "db_a",
+      "type": "database",
+      "label": "postgres",
+      "tag": "только MISS + записи",
+      "pos": [
+        660,
+        540
+      ],
+      "size": [
+        160,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "ДО — Level 2",
+      "wraps": [
+        "nginx_b",
+        "workers_b",
+        "db_b"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "ПОСЛЕ — Level 3",
+      "wraps": [
+        "nginx_a",
+        "workers_a",
+        "cache_a",
+        "db_a"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client_b",
+      "to": "nginx_b",
+      "label": "HTTP",
+      "variant": "default",
+      "labelDy": -10
+    },
+    {
+      "from": "nginx_b",
+      "to": "workers_b",
+      "label": "round-robin",
+      "variant": "emphasis",
+      "labelDy": -10
+    },
+    {
+      "from": "workers_b",
+      "to": "db_b",
+      "label": "SELECT на каждый запрос",
+      "variant": "security",
+      "route": "orthogonal-h",
+      "labelAt": [
+        620,
+        136
+      ]
+    },
+    {
+      "from": "client_a",
+      "to": "nginx_a",
+      "label": "HTTP",
+      "variant": "default",
+      "labelDy": -10
+    },
+    {
+      "from": "nginx_a",
+      "to": "workers_a",
+      "label": "round-robin",
+      "variant": "emphasis",
+      "labelDy": -10
+    },
+    {
+      "from": "workers_a",
+      "to": "cache_a",
+      "label": "1. проверить кэш",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "workers_a",
+      "to": "db_a",
+      "label": "2. SQL только при MISS",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Было",
+      "items": [
+        "Каждый запрос на список объявлений шёл прямиком в postgres — под нагрузочным тестом время ответа растёт линейно вместе с RPS"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Стало",
+      "items": [
+        "Redis отдаёт HIT почти мгновенно (TTL 30 секунд) — postgres видит только MISS и записи вместо 100% трафика на чтение"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Почему это работает — и цена",
+      "items": [
+        "Данные могут быть устаревшими до 30 секунд — осознанный компромисс между свежестью и нагрузкой на БД, не бесплатная оптимизация",
+        "Кэш — ещё один компонент, который может упасть или разойтись с БД по данным (stale cache)"
+      ]
+    }
+  ]
+}

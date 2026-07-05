@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "LLM-in-the-loop инфраструктурный агент — концепция",
+    "subtitle": "LLM объясняет и предлагает, человек решает — не привязано к проекту",
+    "output": "concept.html"
+  },
+  "components": [
+    { "id": "alert", "type": "security", "label": "Алерт (firing)", "sublabel": "от системы мониторинга", "pos": [20, 300], "size": [170, 84] },
+    { "id": "agent", "type": "backend", "label": "Diagnostic Agent", "sublabel": "собирает контекст, зовёт LLM", "pos": [250, 300], "size": [190, 84] },
+    { "id": "observability", "type": "database", "label": "Метрики + логи", "sublabel": "read-only API", "pos": [250, 120], "size": [180, 84] },
+    { "id": "llm", "type": "external", "label": "LLM", "sublabel": "объясняет ПОЧЕМУ", "pos": [500, 300], "size": [150, 84] },
+    { "id": "human", "type": "security", "label": "Human-in-the-loop", "sublabel": "Approve / Reject", "pos": [710, 300], "size": [180, 84] },
+    { "id": "action", "type": "backend", "label": "Исполнитель действия", "tag": "минимальный набор прав", "pos": [950, 300], "size": [190, 84] }
+  ],
+  "connections": [
+    { "from": "alert", "to": "agent", "label": "триггер", "variant": "emphasis", "labelDy": -46 },
+    { "from": "agent", "to": "observability", "label": "read-only: собрать контекст", "variant": "default", "fromSide": "top", "toSide": "bottom" },
+    { "from": "agent", "to": "llm", "label": "запрос диагноза", "variant": "emphasis", "labelDy": -46 },
+    { "from": "llm", "to": "human", "label": "root cause + предложение", "variant": "default", "labelDy": -46 },
+    { "from": "human", "to": "action", "label": "Approve → выполнить", "variant": "emphasis", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "LLM здесь не действует автономно — она только ОБЪЯСНЯЕТ и ПРЕДЛАГАЕТ; финальное решение остаётся за человеком (human-in-the-loop) — осознанный дизайн, а не недоделка",
+      "Агент читает observability-данные ТОЛЬКО через read-only HTTP API, никаких прямых подключений к БД или SSH — компрометация агента не даёт доступа глубже, чем уже был у мониторинга",
+      "Набор разрешённых действий должен быть явным и минимальным (allowlist), а не 'агент может выполнить любую команду' — иначе один галлюцинирующий ответ LLM может натворить дел"
+    ]},
+    { "dot": "amber", "title": "Почему не полная автоматизация", "items": [
+      "Инфраструктурные действия (restart, scale) необратимы или дорого обратимы — цена ошибки высокая, поэтому человек остаётся последним фильтром"
+    ]}
+  ]
+}

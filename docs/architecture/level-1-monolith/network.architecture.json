@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 1 — сетевой путь запроса",
+    "subtitle": "host → docker network → контейнер: что видно снаружи VPS, а что нет",
+    "output": "network.html"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Клиент",
+      "sublabel": "браузер, любой IP",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "ufw",
+      "type": "security",
+      "label": "ufw",
+      "sublabel": "allow 80/tcp (+22 SSH)",
+      "pos": [
+        260,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "nginx",
+      "type": "cloud",
+      "label": "nginx",
+      "sublabel": "хост-порт 80 → контейнер 80",
+      "tag": "единственный published порт",
+      "pos": [
+        500,
+        300
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "backend",
+      "sublabel": "TCP :8000",
+      "tag": "порт НЕ published",
+      "pos": [
+        500,
+        480
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "postgres",
+      "sublabel": "TCP :5432",
+      "tag": "порт НЕ published",
+      "pos": [
+        500,
+        640
+      ],
+      "size": [
+        170,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "VPS хост — публичный IP (видно снаружи)",
+      "wraps": [
+        "ufw",
+        "nginx"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "docker network bridge — только внутри хоста",
+      "wraps": [
+        "backend",
+        "postgres"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client",
+      "to": "ufw",
+      "label": "TCP :80 (HTTP, без TLS)",
+      "variant": "emphasis",
+      "labelAt": [
+        220,
+        296
+      ]
+    },
+    {
+      "from": "ufw",
+      "to": "nginx",
+      "label": "ALLOW → docker proxy на 0.0.0.0:80",
+      "variant": "emphasis",
+      "labelAt": [
+        455,
+        296
+      ]
+    },
+    {
+      "from": "nginx",
+      "to": "backend",
+      "label": "TCP :8000, DNS-имя \"backend\"",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "from": "backend",
+      "to": "postgres",
+      "label": "TCP :5432, SQL (plaintext)",
+      "variant": "emphasis",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "В docker-compose.yml только у nginx есть секция ports: \"80:80\" — у backend и postgres её нет, значит достучаться до них с хоста (не то что снаружи VPS) физически невозможно, даже зная порт",
+        "backend:8000 и postgres:5432 резолвятся по DNS-имени сервиса ТОЛЬКО внутри этой docker-сети — с хост-машины или curl localhost:8000 это не сработает",
+        "HTTP между клиентом и nginx идёт в открытом виде — ни логин, ни JWT-токен не зашифрованы на этом уровне (TLS появится в Level 3.5)",
+        "Если nginx упал, но backend жив — снаружи VPS сервис всё равно недоступен: единственная точка входа — это опубликованный порт 80"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Сегменты сети на этой схеме",
+      "items": [
+        "Интернет → ufw: обычный внешний TCP-трафик",
+        "ufw → nginx: граница хоста, здесь заканчивается 'публичная' сеть",
+        "nginx → backend → postgres: приватная docker-сеть, снаружи адресации не существует"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Теория глубже",
+      "items": [
+        "../networking-theory/03-http-anatomy.html — анатомия HTTP-запроса/ответа, коды состояния",
+        "../networking-theory/04-docker-bridge-networking.html — что такое iptables DNAT и embedded DNS docker'а"
+      ]
+    }
+  ]
+}

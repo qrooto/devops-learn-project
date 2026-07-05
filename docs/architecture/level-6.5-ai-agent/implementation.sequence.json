@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Level 6.5 — реальный поток обработки алерта",
+    "subtitle": "main.py: webhook → контекст → LLM → Telegram Approve/Reject → Docker API",
+    "output": "implementation.html",
+    "viewBox": [960, 880]
+  },
+  "participants": [
+    { "id": "alertmanager", "type": "external", "label": "Alertmanager", "sublabel": "level-6-monitoring" },
+    { "id": "agent", "type": "backend", "label": "AI Agent", "sublabel": ":8080" },
+    { "id": "prometheus", "type": "database", "label": "Prometheus", "sublabel": "instant query" },
+    { "id": "loki", "type": "database", "label": "Loki", "sublabel": "range query" },
+    { "id": "claude", "type": "external", "label": "Claude API", "sublabel": "diagnose()" },
+    { "id": "telegram", "type": "external", "label": "Telegram API", "sublabel": "бот" },
+    { "id": "operator", "type": "external", "label": "Оператор", "sublabel": "дежурный" },
+    { "id": "docker", "type": "security", "label": "Docker API", "sublabel": "restart only" }
+  ],
+  "segments": [
+    { "from": 150, "to": 330, "label": "1. Webhook + сбор контекста" },
+    { "from": 350, "to": 460, "label": "2. Диагноз от LLM" },
+    { "from": 480, "to": 600, "label": "3. Approve / Reject" },
+    { "from": 620, "to": 800, "label": "4. Исполнение + отчёт" }
+  ],
+  "messages": [
+    { "from": "alertmanager", "to": "agent", "y": 190, "label": "POST /webhook", "variant": "emphasis", "note": "payload: alerts[], только firing" },
+    { "from": "agent", "to": "prometheus", "y": 250, "label": "instant query", "variant": "default" },
+    { "from": "agent", "to": "loki", "y": 300, "label": "range query, 5 мин", "variant": "default" },
+
+    { "from": "agent", "to": "claude", "y": 380, "label": "diagnose(alert, context)", "variant": "emphasis", "note": "root_cause, action, confidence — структурированный ответ" },
+    { "from": "claude", "to": "agent", "y": 440, "label": "Diagnosis", "variant": "return" },
+
+    { "from": "agent", "to": "telegram", "y": 520, "label": "диагноз + кнопки Approve/Reject", "variant": "emphasis" },
+    { "from": "operator", "to": "telegram", "y": 570, "label": "нажимает Approve", "variant": "dashed" },
+
+    { "from": "telegram", "to": "agent", "y": 650, "label": "callback: Approve", "variant": "emphasis" },
+    { "from": "agent", "to": "docker", "y": 710, "label": "restart (только allowlist)", "variant": "security", "note": "PROTECTED_CONTAINERS никогда не трогает" },
+    { "from": "agent", "to": "telegram", "y": 770, "label": "отчёт: выполнено", "variant": "return" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "Каждый шаг — async, обработка алертов не блокирует приём новых вебхуков (FastAPI BackgroundTasks): второй алерт не ждёт, пока первый доедет до Telegram",
+      "docker.sock смонтирован НЕ read-only, потому что restart требует записи — единственное отступление от 'read-only observability', явно ограниченное allowlist'ом контейнеров",
+      "PROTECTED_CONTAINERS — агент физически не может тронуть prometheus, grafana, loki, alertmanager, promtail, cadvisor и самого себя, даже если LLM это предложит"
+    ]},
+    { "dot": "amber", "title": "Что если LLM ошибётся", "items": [
+      "Confidence — часть структурированного ответа Claude; низкая уверенность может быть поводом требовать более явного подтверждения от оператора"
+    ]}
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 3 → Level 4: боль и решение",
+    "subtitle": "Было: ручной деплой с простоем → Стало: pipeline с rolling-обновлением и контролем над кодом",
+    "output": "pain-solution.html"
+  },
+  "components": [
+    {
+      "id": "dev_b",
+      "type": "external",
+      "label": "Разработчик",
+      "pos": [
+        40,
+        140
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "manual",
+      "type": "backend",
+      "label": "Ручной SSH-деплой",
+      "tag": "restart всех 3 сразу → downtime",
+      "pos": [
+        280,
+        140
+      ],
+      "size": [
+        200,
+        84
+      ]
+    },
+    {
+      "id": "dev_a",
+      "type": "external",
+      "label": "Разработчик",
+      "pos": [
+        40,
+        420
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "pipeline",
+      "type": "cloud",
+      "label": "GitLab pipeline",
+      "sublabel": "test → build → deploy",
+      "pos": [
+        280,
+        420
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "rolling",
+      "type": "backend",
+      "label": "Rolling deploy",
+      "tag": "по одному backend_N, downtime = 0",
+      "pos": [
+        560,
+        420
+      ],
+      "size": [
+        190,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "ДО — Level 3",
+      "wraps": [
+        "manual"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "ПОСЛЕ — Level 4",
+      "wraps": [
+        "pipeline",
+        "rolling"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "dev_b",
+      "to": "manual",
+      "label": "ssh + docker compose restart",
+      "variant": "security",
+      "labelDy": -46
+    },
+    {
+      "from": "dev_a",
+      "to": "pipeline",
+      "label": "git push",
+      "variant": "emphasis",
+      "labelDy": -46
+    },
+    {
+      "from": "pipeline",
+      "to": "rolling",
+      "label": "manual gate → деплой",
+      "variant": "emphasis",
+      "labelAt": [
+        510,
+        416
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Было",
+      "items": [
+        "Обновление образа = ручной SSH и docker compose restart — либо все 3 инстанса сразу (downtime), либо по одному руками, легко ошибиться в команде"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Стало",
+      "items": [
+        "Pipeline (test → build → deploy) автоматизирует rolling update по одному инстансу; код и Docker-образы остаются на своей инфраструктуре, а не в стороннем SaaS"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Почему это работает",
+      "items": [
+        "Ручной gate (when: manual) на деплой в прод — автоматизация не значит потерю контроля, кнопку всё равно нажимает человек осознанно"
+      ]
+    }
+  ]
+}

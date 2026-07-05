@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 4 → Level 5: боль и решение",
+    "subtitle": "Было: ручное восстановление и масштабирование → Стало: self-healing + автомасштабирование",
+    "output": "pain-solution.html"
+  },
+  "components": [
+    { "id": "server_b", "type": "cloud", "label": "VPS + docker compose", "tag": "перезагрузка → кто запустит контейнеры?", "pos": [60, 140], "size": [220, 84] },
+    { "id": "dead_b", "type": "backend", "label": "Упавший контейнер", "tag": "лежит, пока не зайдёшь руками", "pos": [340, 140], "size": [190, 84] },
+
+    { "id": "deployment_a", "type": "cloud", "label": "Deployment backend", "tag": "2/3 живо → пересоздаёт третий сам", "pos": [60, 420], "size": [200, 84] },
+    { "id": "hpa_a", "type": "security", "label": "HPA", "tag": "CPU вырос → Pod'ов больше, сам", "pos": [340, 420], "size": [180, 84] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "ДО — Level 4 (docker compose)", "wraps": ["server_b", "dead_b"] },
+    { "kind": "region", "label": "ПОСЛЕ — Level 5 (Kubernetes)", "wraps": ["deployment_a", "hpa_a"] }
+  ],
+  "connections": [
+    { "from": "server_b", "to": "dead_b", "label": "нет процесса, который следит", "variant": "security", "labelDy": -46 },
+    { "from": "deployment_a", "to": "hpa_a", "label": "оба работают без участия человека", "variant": "emphasis", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Было", "items": [
+      "docker-compose не перезапускает упавшие контейнеры сам, не масштабирует под нагрузкой и не переживает перезагрузку сервера без ручного docker compose up"
+    ]},
+    { "dot": "emerald", "title": "Стало", "items": [
+      "Deployment постоянно сверяет факт с желаемым состоянием и пересоздаёт упавшие Pod'ы; HPA добавляет Pod'ы при росте CPU — оба процесса идут без участия человека"
+    ]},
+    { "dot": "amber", "title": "Почему это работает", "items": [
+      "Это не 'Docker Compose++', а другой уровень абстракции: control loop, встроенный в систему, а не набор bash-скриптов и cron"
+    ]}
+  ]
+}

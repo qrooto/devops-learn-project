@@ -409,3 +409,14 @@ git commit -m "level-4-gitlab: self-hosted gitlab ce with ci/cd pipeline"
 git push origin main
 git push gitlab main
 ```
+
+---
+
+## Архитектура
+
+- [Концепция: self-hosted CI/CD в вакууме](../docs/architecture/level-4-gitlab/concept.html) — код и registry остаются на своей инфраструктуре
+- [Реализация: реальный pipeline](../docs/architecture/level-4-gitlab/implementation.html) — gitlab-ce, gitlab-runner (dind + privileged), .gitlab-ci.yml с manual gate на деплой
+- [Боль → решение: Level 3 → Level 4](../docs/architecture/level-4-gitlab/pain-solution.html) — от ручного простоя к rolling-деплою с контролем над кодом
+- [Сеть: новые порты 8929 и 2222](../docs/architecture/level-4-gitlab/network.html) — почему GitLab слушает SSH не на 22
+
+Диаграммы — самодостаточные `.html` файлы (переключатель темы, экспорт в PNG/SVG в браузере). GitHub покажет только исходный код — открывай файл локально в браузере.

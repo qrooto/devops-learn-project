@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 5 → Level 7: боль и решение",
+    "subtitle": "Было: kubectl apply по файлам, без версий → Стало: один чарт, история релизов",
+    "output": "pain-solution.html"
+  },
+  "components": [
+    { "id": "dev_b", "type": "external", "label": "Ты", "pos": [40, 140], "size": [110, 84] },
+    { "id": "files_b", "type": "backend", "label": "kubectl apply -f k8s/...", "tag": "8+ файлов, порядок важен, нет истории", "pos": [260, 140], "size": [230, 84] },
+
+    { "id": "dev_a", "type": "external", "label": "Ты", "pos": [40, 420], "size": [110, 84] },
+    { "id": "helm_a", "type": "cloud", "label": "helm install/upgrade", "tag": "один чарт, версии, откат одной командой", "pos": [260, 420], "size": [230, 84] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "ДО — Level 5", "wraps": ["files_b"] },
+    { "kind": "region", "label": "ПОСЛЕ — Level 7", "wraps": ["helm_a"] }
+  ],
+  "connections": [
+    { "from": "dev_b", "to": "files_b", "label": "помнить порядок и что менял", "variant": "security", "labelDy": -46 },
+    { "from": "dev_a", "to": "helm_a", "label": "helm history + helm rollback", "variant": "emphasis", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Было", "items": [
+      "kubectl apply -f k8s/postgres/, потом redis/, потом backend/... — порядок важен, 8+ файлов, нет истории 'что именно было задеплоено вчера'"
+    ]},
+    { "dot": "emerald", "title": "Стало", "items": [
+      "helm install/upgrade — один чарт, одна команда, весь стек с нужными параметрами под окружение (dev/staging/prod через разные values-файлы)"
+    ]},
+    { "dot": "amber", "title": "Почему это работает", "items": [
+      "helm history + helm rollback дают версионирование 'бесплатно' — откат к любой прошлой ревизии одной командой вместо восстановления по памяти"
+    ]}
+  ]
+}

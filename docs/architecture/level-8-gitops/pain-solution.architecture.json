@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 7 → Level 8: боль и решение",
+    "subtitle": "Было: кластер может дрейфовать → Стало: непрерывная сверка с Git",
+    "output": "pain-solution.html"
+  },
+  "components": [
+    { "id": "ci_b", "type": "backend", "label": "CI: helm upgrade", "tag": "применили один раз и забыли", "pos": [40, 140], "size": [200, 84] },
+    { "id": "manual_b", "type": "security", "label": "kubectl edit руками", "tag": "CI об этом не узнает", "pos": [300, 140], "size": [190, 84] },
+
+    { "id": "git_a", "type": "database", "label": "Git repo", "pos": [40, 420], "size": [140, 84] },
+    { "id": "argocd_a", "type": "security", "label": "ArgoCD", "tag": "сверяет непрерывно, чинит сам", "pos": [240, 420], "size": [190, 84] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "ДО — Level 7", "wraps": ["ci_b", "manual_b"] },
+    { "kind": "region", "label": "ПОСЛЕ — Level 8", "wraps": ["git_a", "argocd_a"] }
+  ],
+  "connections": [
+    { "from": "ci_b", "to": "manual_b", "label": "драфт накапливается незаметно", "variant": "security", "labelDy": -46 },
+    { "from": "git_a", "to": "argocd_a", "label": "источник правды всегда актуален", "variant": "emphasis", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Было", "items": [
+      "После helm upgrade из CI никто не следит за кластером дальше — если кто-то зайдёт и поправит руками, CI об этом не узнает, дрейф накапливается незаметно"
+    ]},
+    { "dot": "emerald", "title": "Стало", "items": [
+      "ArgoCD непрерывно сравнивает Git с реальным состоянием кластера и либо чинит сам (selfHeal), либо сигнализирует о расхождении — Git остаётся единственным источником правды"
+    ]},
+    { "dot": "amber", "title": "Почему это работает", "items": [
+      "Reconciliation loop работает постоянно, а не только в момент деплоя — это разница между 'применили один раз' и 'поддерживаем состояние всегда'"
+    ]}
+  ]
+}

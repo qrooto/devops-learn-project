@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 5 — реальные манифесты",
+    "subtitle": "namespace bulletin-board: Deployments, Services, HPA",
+    "output": "implementation.html"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Клиент",
+      "pos": [
+        20,
+        340
+      ],
+      "size": [
+        120,
+        84
+      ]
+    },
+    {
+      "id": "nginxsvc",
+      "type": "cloud",
+      "label": "Service nginx",
+      "sublabel": "NodePort :30080",
+      "tag": "единственный вход снаружи",
+      "pos": [
+        220,
+        340
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "nginxpod",
+      "type": "frontend",
+      "label": "Pod nginx",
+      "sublabel": "replicas: 1",
+      "pos": [
+        480,
+        340
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "backendsvc",
+      "type": "cloud",
+      "label": "Service backend",
+      "sublabel": "ClusterIP :8000",
+      "pos": [
+        710,
+        200
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "backendpods",
+      "type": "backend",
+      "label": "3× Pod backend",
+      "sublabel": "readiness/liveness /api/health",
+      "pos": [
+        990,
+        200
+      ],
+      "size": [
+        190,
+        84
+      ]
+    },
+    {
+      "id": "hpa",
+      "type": "security",
+      "label": "HPA",
+      "sublabel": "min 2, max 10",
+      "tag": "CPU > 50% → +Pod",
+      "pos": [
+        990,
+        40
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "postgressvc",
+      "type": "database",
+      "label": "Service postgres",
+      "sublabel": "ClusterIP :5432",
+      "pos": [
+        710,
+        420
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "redissvc",
+      "type": "database",
+      "label": "Service redis",
+      "sublabel": "ClusterIP :6379",
+      "pos": [
+        710,
+        560
+      ],
+      "size": [
+        170,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "namespace: bulletin-board",
+      "wraps": [
+        "nginxsvc",
+        "nginxpod",
+        "backendsvc",
+        "backendpods",
+        "hpa",
+        "postgressvc",
+        "redissvc"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client",
+      "to": "nginxsvc",
+      "label": "TCP :30080",
+      "variant": "emphasis",
+      "labelDy": -46
+    },
+    {
+      "from": "nginxsvc",
+      "to": "nginxpod",
+      "variant": "emphasis"
+    },
+    {
+      "from": "nginxpod",
+      "to": "backendsvc",
+      "label": "/api/* proxy_pass",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "backendsvc",
+      "to": "backendpods",
+      "label": "kube-proxy выбирает Pod",
+      "variant": "emphasis",
+      "labelAt": [
+        940,
+        196
+      ]
+    },
+    {
+      "from": "hpa",
+      "to": "backendpods",
+      "label": "scale in/out",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "backendpods",
+      "to": "postgressvc",
+      "variant": "default",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "backendpods",
+      "to": "redissvc",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "Service — стабильный виртуальный IP + DNS-имя перед изменчивым набором Pod'ов: backend:8000 работает независимо от того, сколько Pod'ов backend сейчас живо и с какими IP",
+        "NodePort 30080 — единственная точка входа снаружи кластера в этой конфигурации (без Ingress); в проде обычно ставят Ingress Controller перед этим",
+        "HPA следит за CPU через metrics-server, не за RPS напрямую — при резком всплеске трафика есть задержка, пока метрики не покажут рост нагрузки"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Что уже встроено само",
+      "items": [
+        "readinessProbe не пускает трафик на Pod, пока /api/health не ответит — новый Pod не получит запросы, пока не готов",
+        "livenessProbe перезапускает Pod, если /api/health перестал отвечать — даже если процесс формально жив, но завис"
+      ]
+    }
+  ]
+}

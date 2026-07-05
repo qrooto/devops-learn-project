@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Reverse Proxy + монолит — концепция",
+    "subtitle": "Абстрактная схема: один вход, один backend, одна база",
+    "output": "concept.html"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Клиент",
+      "sublabel": "браузер",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "proxy",
+      "type": "cloud",
+      "label": "Reverse Proxy",
+      "sublabel": "единая точка входа",
+      "pos": [
+        260,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "static",
+      "type": "frontend",
+      "label": "Статика",
+      "sublabel": "HTML/CSS/JS",
+      "pos": [
+        260,
+        140
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "app",
+      "type": "backend",
+      "label": "Backend процесс",
+      "sublabel": "один инстанс",
+      "tag": "single point of failure",
+      "pos": [
+        500,
+        300
+      ],
+      "size": [
+        160,
+        84
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "База данных",
+      "sublabel": "хранит состояние",
+      "pos": [
+        740,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client",
+      "to": "proxy",
+      "label": "HTTP",
+      "variant": "emphasis"
+    },
+    {
+      "from": "proxy",
+      "to": "static",
+      "label": "раздаёт напрямую",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "proxy",
+      "to": "app",
+      "label": "/api/* → проксирование",
+      "variant": "emphasis",
+      "labelAt": [
+        455,
+        296
+      ]
+    },
+    {
+      "from": "app",
+      "to": "db",
+      "label": "SQL-запросы",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "Reverse proxy — единственная точка входа: сам решает, что отдать напрямую (статику), а что переслать дальше (API-запросы)",
+        "Один инстанс backend — это одновременно единственная точка отказа И потолок производительности: упал или задохнулся под нагрузкой — недоступен весь API",
+        "Proxy физически отделён от backend не просто так: он продолжит отдавать статику, даже если backend уже упал"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Слои",
+      "items": [
+        "Каждый слой можно заменить независимо, пока не меняется контракт между ними (HTTP между proxy и backend, SQL между backend и базой)"
+      ]
+    }
+  ]
+}

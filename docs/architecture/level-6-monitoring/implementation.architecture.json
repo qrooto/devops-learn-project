@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 6 — реальный docker-compose",
+    "subtitle": "Prometheus scrape + Grafana дашборды + Loki/Promtail логи",
+    "output": "implementation.html"
+  },
+  "components": [
+    { "id": "prometheus", "type": "cloud", "label": "prometheus:v2.55.1", "sublabel": ":9090", "tag": "scrape каждые 15с", "pos": [340, 140], "size": [200, 84] },
+    { "id": "backends", "type": "backend", "label": "backend_1/2/3", "sublabel": "/metrics :8000", "pos": [40, 140], "size": [180, 84] },
+    { "id": "cadvisor", "type": "backend", "label": "cAdvisor", "sublabel": "/metrics :8080", "tag": "CPU/RAM контейнеров", "pos": [40, 320], "size": [180, 84] },
+    { "id": "grafana", "type": "frontend", "label": "grafana:11.3.0", "sublabel": ":3000", "pos": [640, 140], "size": [190, 84] },
+    { "id": "loki", "type": "database", "label": "loki:3.2.0", "sublabel": ":3100", "pos": [640, 320], "size": [170, 84] },
+    { "id": "promtail", "type": "backend", "label": "promtail", "tag": "читает docker *-json.log", "pos": [340, 460], "size": [190, 84] }
+  ],
+  "connections": [
+    { "from": "prometheus", "to": "backends", "label": "scrape /metrics", "variant": "emphasis", "fromSide": "left", "toSide": "right" },
+    { "from": "prometheus", "to": "cadvisor", "label": "scrape /metrics", "variant": "emphasis", "fromSide": "bottom", "toSide": "top" },
+    { "from": "grafana", "to": "prometheus", "label": "PromQL", "variant": "emphasis", "fromSide": "left", "toSide": "right" },
+    { "from": "grafana", "to": "loki", "label": "LogQL", "variant": "emphasis", "fromSide": "bottom", "toSide": "top" },
+    { "from": "promtail", "to": "loki", "label": "push логи с метками {container=...}", "variant": "default", "fromSide": "right", "toSide": "bottom" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "prometheus-fastapi-instrumentator в backend автоматически добавляет /metrics — не нужно вручную считать RPS/latency, инструментатор оборачивает все хендлеры",
+      "cAdvisor читает /rootfs, /sys, /var/lib/docker напрямую с хоста (read-only монты) — поэтому видит РЕАЛЬНОЕ потребление CPU/RAM каждого контейнера, а не то, что сообщает сам контейнер",
+      "Promtail — не 'Prometheus для логов', а именно агент доставки: сам не хранит и не индексирует, только читает и пересылает в Loki с метками"
+    ]},
+    { "dot": "amber", "title": "Что настораживает в этом конфиге", "items": [
+      "GF_SECURITY_ADMIN_PASSWORD: admin — пароль Grafana захардкожен открытым текстом в docker-compose.yml (см. network-схему)"
+    ]}
+  ]
+}

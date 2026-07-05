@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Agentless конфигурация через SSH — концепция",
+    "subtitle": "Control node сама подключается к узлам, ничего на них заранее не устанавливая",
+    "output": "concept.html"
+  },
+  "components": [
+    { "id": "playbook", "type": "frontend", "label": "Playbook (YAML)", "sublabel": "желаемое состояние", "pos": [40, 300], "size": [190, 84] },
+    { "id": "control", "type": "cloud", "label": "Control node", "sublabel": "Ansible установлен здесь", "pos": [320, 300], "size": [180, 84] },
+    { "id": "node1", "type": "backend", "label": "Managed node 1", "tag": "только SSH + Python", "pos": [600, 140], "size": [180, 84] },
+    { "id": "node2", "type": "backend", "label": "Managed node 2", "tag": "только SSH + Python", "pos": [600, 300], "size": [180, 84] },
+    { "id": "node3", "type": "backend", "label": "Managed node N", "tag": "только SSH + Python", "pos": [600, 460], "size": [180, 84] }
+  ],
+  "connections": [
+    { "from": "playbook", "to": "control", "label": "ansible-playbook", "variant": "emphasis", "labelDy": -46 },
+    { "from": "control", "to": "node1", "label": "SSH", "variant": "emphasis" },
+    { "from": "control", "to": "node2", "variant": "default" },
+    { "from": "control", "to": "node3", "variant": "default" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "Agentless: на управляемых узлах не нужно ничего устанавливать заранее, кроме Python — сам Ansible живёт только на control node и подключается по обычному SSH",
+      "Идемпотентность: каждый модуль сам проверяет 'а нужно ли это делать' перед выполнением — повторный запуск playbook не ломает уже настроенное и не делает работу дважды",
+      "Push-модель (в отличие от Puppet/Chef с их pull-агентами): control node сама инициирует подключение к каждому узлу — по очереди или параллельно (forks)"
+    ]},
+    { "dot": "amber", "title": "Декларативность", "items": [
+      "Пишешь docker: state=present, а не 'команды для установки Docker' — Ansible сам разбирается как этого достичь на конкретной ОС"
+    ]}
+  ]
+}

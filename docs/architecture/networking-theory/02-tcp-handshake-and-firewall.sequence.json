@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Теория: TCP-handshake и 3 исхода на firewall",
+    "subtitle": "Открыт+слушает / закрыт (RST) / заблокирован firewall'ом (тишина) — разные симптомы, разная диагностика",
+    "output": "02-tcp-handshake-and-firewall.html",
+    "viewBox": [860, 640]
+  },
+  "participants": [
+    { "id": "client", "type": "external", "label": "Клиент", "sublabel": "curl / браузер" },
+    { "id": "firewall", "type": "security", "label": "Firewall", "sublabel": "ufw / iptables" },
+    { "id": "server", "type": "backend", "label": "Сервер", "sublabel": "хост + приложение" }
+  ],
+  "segments": [
+    { "from": 150, "to": 300, "label": "1. Порт открыт, процесс слушает — обычный handshake" },
+    { "from": 320, "to": 410, "label": "2. Порт закрыт: firewall разрешает, но никто не слушает" },
+    { "from": 430, "to": 520, "label": "3. Порт заблокирован firewall'ом" }
+  ],
+  "messages": [
+    { "from": "client", "to": "server", "y": 190, "label": "SYN → :443", "variant": "emphasis" },
+    { "from": "server", "to": "client", "y": 230, "label": "SYN-ACK", "variant": "return" },
+    { "from": "client", "to": "server", "y": 270, "label": "ACK — ESTABLISHED", "variant": "emphasis" },
+
+    { "from": "client", "to": "server", "y": 350, "label": "SYN → :9999", "variant": "emphasis" },
+    { "from": "server", "to": "client", "y": 390, "label": "RST — порт закрыт", "variant": "security", "note": "ОС отвечает мгновенно от имени ядра, не приложения" },
+
+    { "from": "client", "to": "firewall", "y": 470, "label": "SYN → :5432", "variant": "security", "note": "DROP — пакет уничтожен здесь, ответа не будет" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "RST приходит мгновенно — это осознанный отказ, порт технически доступен, но там никто не слушает (curl: 'Connection refused')",
+      "DROP на firewall не отвечает вообще ничего — клиент ждёт полный TCP timeout (обычно 20-30с у curl/браузера), это единственный сигнал 'что-то не так' в этом случае",
+      "По этой разнице можно диагностировать удалённо: мгновенный отказ = проблема в приложении (не слушает), долгое зависание = проблема в firewall/маршрутизации"
+    ]},
+    { "dot": "amber", "title": "Команды для проверки", "items": [
+      "nc -zv <host> <port> — быстрая проверка, покажет refused/timeout/succeeded",
+      "curl -v telnet://host:port или ss -tulpn на самом сервере — что реально слушает локально"
+    ]}
+  ]
+}

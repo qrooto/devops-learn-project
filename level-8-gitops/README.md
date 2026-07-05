@@ -338,3 +338,15 @@ kubectl describe pod <имя-pod> -n bulletin-board
 # Смотрим логи Pod:
 kubectl logs <pod-name> -n bulletin-board --previous
 ```
+
+---
+
+## Архитектура
+
+- [Концепция: push vs pull деплой в вакууме](../docs/architecture/level-8-gitops/concept.html) — где живут credentials и кто инициирует применение изменений
+- [Реализация: реальный ArgoCD Application](../docs/architecture/level-8-gitops/implementation.html) — selfHeal, prune, polling/webhook
+- [Боль → решение: Level 7 → Level 8](../docs/architecture/level-8-gitops/pain-solution.html) — от дрейфующего кластера к непрерывной сверке с Git
+
+Сетевой схемы для этого уровня нет: ArgoCD работает внутри того же кластера и не открывает новый внешний сегмент — синхронизация с Git идёт исходящим запросом (egress), как и вызовы внешних API на Level 6.5 (см. [теорию про egress](../docs/architecture/networking-theory/08-webhooks-and-egress.html)).
+
+Диаграммы — самодостаточные `.html` файлы (переключатель темы, экспорт в PNG/SVG в браузере). GitHub покажет только исходный код — открывай файл локально в браузере.

@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 0 — сетевой периметр VPS",
+    "subtitle": "что видно снаружи, что заблокировано firewall'ом, что открыто но ещё не слушает",
+    "output": "network.html"
+  },
+  "components": [
+    {
+      "id": "internet",
+      "type": "external",
+      "label": "Клиент в интернете",
+      "sublabel": "любой IP",
+      "pos": [
+        40,
+        320
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "ufw",
+      "type": "security",
+      "label": "ufw",
+      "sublabel": "default deny + allow-list",
+      "pos": [
+        280,
+        320
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "port22",
+      "type": "security",
+      "label": "TCP :22 — SSH",
+      "sublabel": "в allow-list",
+      "tag": "sshd слушает",
+      "pos": [
+        560,
+        140
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "port80",
+      "type": "security",
+      "label": "TCP :80 — HTTP",
+      "sublabel": "в allow-list",
+      "tag": "слушателя пока нет",
+      "pos": [
+        560,
+        320
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "port443",
+      "type": "security",
+      "label": "TCP :443 — HTTPS",
+      "sublabel": "в allow-list",
+      "tag": "слушателя пока нет",
+      "pos": [
+        560,
+        500
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "blocked",
+      "type": "security",
+      "label": "TCP :5432 (пример)",
+      "sublabel": "НЕ в allow-list",
+      "tag": "DROP, без ответа",
+      "pos": [
+        560,
+        680
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "sshd",
+      "type": "backend",
+      "label": "sshd",
+      "sublabel": "процесс на хосте",
+      "pos": [
+        830,
+        140
+      ],
+      "size": [
+        140,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "VPS — публичный IP (весь периметр виден снаружи)",
+      "wraps": [
+        "ufw",
+        "port22",
+        "port80",
+        "port443",
+        "blocked",
+        "sshd"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "internet",
+      "to": "ufw",
+      "label": "TCP SYN на любой порт",
+      "variant": "dashed",
+      "labelAt": [
+        230,
+        316
+      ]
+    },
+    {
+      "from": "ufw",
+      "to": "port22",
+      "label": "ALLOW",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ufw",
+      "to": "port80",
+      "label": "ALLOW, слушателя нет",
+      "variant": "dashed"
+    },
+    {
+      "from": "ufw",
+      "to": "port443",
+      "label": "ALLOW, слушателя нет",
+      "variant": "dashed"
+    },
+    {
+      "from": "ufw",
+      "to": "blocked",
+      "label": "не в списке → DROP",
+      "variant": "security"
+    },
+    {
+      "from": "port22",
+      "to": "sshd",
+      "label": "TCP handshake OK",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "ufw allow ≠ там что-то работает: порт разрешён firewall'ом, но если процесс не слушает — снаружи это 'connection refused' (TCP RST), а не 'подключился'",
+        "Заблокированный firewall'ом порт ведёт себя иначе: пакет тихо дропается, клиент получит timeout, а не мгновенный отказ — по этой разнице можно отличить 'закрыто firewall' от 'открыто, но никто не слушает'",
+        "На этом уровне снаружи видно ровно 3 порта: 22, 80, 443. Всё остальное (5432 Postgres, 6379 Redis, 9090 Prometheus из будущих уровней) не должно попадать в allow-list по умолчанию",
+        "ss -tulpn (что слушает локально) и ufw status (что разрешено извне) — это два независимых списка, для диагностики нужны оба"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Протокол",
+      "items": [
+        "SSH — TCP, трафик шифруется на уровне самого протокола",
+        "HTTP/HTTPS ещё не используются — появятся в Level 1 (:80) и Level 3.5 (:443, TLS termination)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Теория глубже",
+      "items": [
+        "../networking-theory/01-ports-and-sockets.html — что вообще такое IP:порт и сокет",
+        "../networking-theory/02-tcp-handshake-and-firewall.html — SYN/ACK и разница между RST и тишиной от firewall"
+      ]
+    }
+  ]
+}

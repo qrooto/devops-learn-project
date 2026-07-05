@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 4 (GitLab) — сетевой путь",
+    "subtitle": "Новые published-порты: 8929 (HTTP) и 2222 (git SSH)",
+    "output": "network.html"
+  },
+  "components": [
+    {
+      "id": "dev",
+      "type": "external",
+      "label": "Разработчик",
+      "sublabel": "git push / браузер",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "ufw",
+      "type": "security",
+      "label": "ufw",
+      "sublabel": "allow 8929, 2222 (+22,80,443)",
+      "pos": [
+        280,
+        300
+      ],
+      "size": [
+        190,
+        84
+      ]
+    },
+    {
+      "id": "gitlab",
+      "type": "cloud",
+      "label": "gitlab-ce",
+      "sublabel": "хост:8929→конт:8929, хост:2222→конт:22",
+      "pos": [
+        560,
+        300
+      ],
+      "size": [
+        210,
+        84
+      ]
+    },
+    {
+      "id": "runner",
+      "type": "backend",
+      "label": "gitlab-runner",
+      "tag": "порт НЕ published",
+      "pos": [
+        860,
+        300
+      ],
+      "size": [
+        170,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "VPS хост — публичный IP (видно снаружи)",
+      "wraps": [
+        "ufw",
+        "gitlab"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "docker network bridge",
+      "wraps": [
+        "runner"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "dev",
+      "to": "ufw",
+      "label": "TCP :8929 (HTTP) или :2222 (git SSH)",
+      "variant": "emphasis",
+      "labelDy": -46
+    },
+    {
+      "from": "ufw",
+      "to": "gitlab",
+      "label": "ALLOW",
+      "variant": "emphasis"
+    },
+    {
+      "from": "gitlab",
+      "to": "runner",
+      "label": "internal job dispatch",
+      "variant": "default",
+      "labelAt": [
+        815,
+        296
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "Порт 2222 (не 22!) выбран специально: 22 уже занят системным SSH с Level 0, GitLab слушает свой SSH для git push/pull на отдельном порту",
+        "gitlab-runner не имеет published-порта — он не принимает входящие соединения, только сам инициирует запросы к GitLab за новыми job'ами (polling), поэтому наружу его светить не нужно",
+        "GitLab требует 4GB+ RAM — если совмещать с уровнями 1-3 на той же VPS, порт 80 может конфликтовать (см. предупреждение в README)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Сегменты сети на этой схеме",
+      "items": [
+        "Публичный: ufw + gitlab (веб-интерфейс, git по SSH)",
+        "Приватный: runner — только исходящие соединения к gitlab за задачами"
+      ]
+    }
+  ]
+}

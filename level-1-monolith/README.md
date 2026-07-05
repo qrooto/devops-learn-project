@@ -616,3 +616,17 @@ docker compose exec backend alembic current
 # Посмотреть таблицы в базе:
 docker compose exec postgres psql -U postgres -d bulletin_board -c "\dt"
 ```
+
+---
+
+## Архитектура
+
+- [Концепция: reverse proxy + монолит в вакууме](../docs/architecture/level-1-monolith/concept.html) — единая точка входа, один backend, одна база, без привязки к проекту
+- [Реализация: реальный docker-compose.yml](../docs/architecture/level-1-monolith/implementation.html) — nginx, FastAPI на uvicorn :8000, postgres, конкретные volume и healthcheck
+- [Сеть: host → docker network → контейнер](../docs/architecture/level-1-monolith/network.html) — что публикуется наружу VPS (только порт 80), что доступно только внутри docker-сети
+
+**Теория сетей глубже:**
+- [Анатомия HTTP-запроса](../docs/architecture/networking-theory/03-http-anatomy.html) — метод, заголовки, коды состояния, почему HTTP stateless
+- [Docker bridge-сеть изнутри](../docs/architecture/networking-theory/04-docker-bridge-networking.html) — что реально происходит за `ports: "80:80"` и `DATABASE_URL=...@postgres:5432`
+
+Диаграммы — самодостаточные `.html` файлы (переключатель темы, экспорт в PNG/SVG в браузере). GitHub покажет только исходный код — открывай файл локально в браузере.

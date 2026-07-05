@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Cache-aside — концепция",
+    "subtitle": "Приложение само решает когда читать из кэша, когда идти в БД",
+    "output": "concept.html"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Клиент",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        120,
+        84
+      ]
+    },
+    {
+      "id": "app",
+      "type": "backend",
+      "label": "Application",
+      "sublabel": "cache-aside логика",
+      "pos": [
+        270,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "cache",
+      "type": "database",
+      "label": "Cache",
+      "sublabel": "in-memory, TTL",
+      "tag": "HIT: ~1 мс",
+      "pos": [
+        540,
+        140
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "Source of truth",
+      "sublabel": "authoritative",
+      "tag": "MISS: 50-200 мс",
+      "pos": [
+        540,
+        460
+      ],
+      "size": [
+        160,
+        84
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client",
+      "to": "app",
+      "label": "запрос",
+      "variant": "default",
+      "labelDy": -10
+    },
+    {
+      "from": "app",
+      "to": "cache",
+      "label": "GET/SET key, TTL",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "app",
+      "to": "db",
+      "label": "SELECT (только при MISS)",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "Кэш — это компромисс: быстрее БД на порядки, но данные могут быть устаревшими на срок TTL — осознанно выбирай, для каких данных это приемлемо",
+        "Cache-aside: приложение САМО решает, когда читать из кэша, когда из БД и когда его обновлять — в отличие от write-through, где кэш обновляется автоматически при каждой записи",
+        "Если кэш недоступен, приложение обязано продолжать работать через fallback на БД, а не падать — иначе оптимизация превращается в новую точку отказа"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Вопросы на собеседовании про кэш",
+      "items": [
+        "Что происходит при cache stampede (TTL истёк у горячего ключа под нагрузкой)?",
+        "Как инвалидировать кэш при изменении данных — TTL или явный delete?"
+      ]
+    }
+  ]
+}

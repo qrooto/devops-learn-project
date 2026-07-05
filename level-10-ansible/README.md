@@ -563,3 +563,17 @@ ansible-playbook site.yml --list-tasks
 # Dry run с показом изменений:
 ansible-playbook site.yml --check --diff
 ```
+
+---
+
+## Архитектура
+
+- [Концепция: agentless конфигурация через SSH в вакууме](../docs/architecture/level-10-ansible/concept.html) — control node сама подключается, ничего заранее не устанавливая
+- [Реализация: реальный site.yml](../docs/architecture/level-10-ansible/implementation.html) — роли common → docker → tools → app по порядку
+- [Боль → решение: ручная настройка N серверов → Ansible](../docs/architecture/level-10-ansible/pain-solution.html) — от часов ручной работы к одному воспроизводимому playbook
+- [Сеть: SSH fan-out](../docs/architecture/level-10-ansible/network.html) — control node инициирует, узлы никогда не звонят обратно
+
+**Теория сетей глубже:**
+- [SSH fan-out и переиспользование соединений](../docs/architecture/networking-theory/09-ssh-fanout.html) — один узел управляет многими, ControlMaster/ControlPersist
+
+Диаграммы — самодостаточные `.html` файлы (переключатель темы, экспорт в PNG/SVG в браузере). GitHub покажет только исходный код — открывай файл локально в браузере.

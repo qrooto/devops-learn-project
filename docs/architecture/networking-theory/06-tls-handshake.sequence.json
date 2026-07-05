@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Теория: TLS 1.3 handshake",
+    "subtitle": "Что происходит до первого байта приложения — не привязано к проекту",
+    "output": "06-tls-handshake.html",
+    "viewBox": [860, 500]
+  },
+  "participants": [
+    { "id": "client", "type": "external", "label": "Клиент", "sublabel": "браузер / curl" },
+    { "id": "server", "type": "security", "label": "Сервер", "sublabel": "TLS-endpoint" }
+  ],
+  "segments": [
+    { "from": 150, "to": 345, "label": "TLS 1.3 handshake (упрощённо, 1 round-trip)" },
+    { "from": 365, "to": 410, "label": "Дальше — обычный HTTP поверх шифрованного канала" }
+  ],
+  "messages": [
+    { "from": "client", "to": "server", "y": 190, "label": "ClientHello", "variant": "emphasis", "note": "поддерживаемые шифры, TLS-версии, SNI — какой домен запрашивается" },
+    { "from": "server", "to": "client", "y": 250, "label": "ServerHello + сертификат", "variant": "return", "note": "сертификат подписан CA + публичный ключ для обмена секретом" },
+    { "from": "client", "to": "server", "y": 310, "label": "Finished — шифрование началось", "variant": "emphasis", "note": "клиент проверил цепочку сертификата локально через доверенные корневые CA" },
+    { "from": "client", "to": "server", "y": 390, "label": "GET /api/... (зашифровано)", "variant": "default" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "ServerHello приходит вместе с сертификатом сразу — в TLS 1.3 всё рукопожатие укладывается в 1 полный round-trip (в TLS 1.2 было 2), отсюда ощутимо более быстрый первый коннект",
+      "SNI (Server Name Indication) в ClientHello передаётся ДО шифрования — наблюдатель на пути видит, к какому домену идёт подключение, даже по HTTPS; шифруется только то, что после handshake",
+      "Самоподписанный сертификат шифрует так же надёжно, как от Let's Encrypt — разница только в том, что браузер не может проверить цепочку доверия и предупреждает пользователя"
+    ]},
+    { "dot": "amber", "title": "Где это в проекте", "items": [
+      "Level 3.5 — Traefik делает ровно это на границе VPS, ACME (Let's Encrypt) автоматизирует получение сертификата вместо ручной генерации self-signed"
+    ]}
+  ]
+}

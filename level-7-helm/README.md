@@ -539,3 +539,15 @@ helm get values bulletin-board --all
 # Сравнить с тем что ты хочешь:
 helm upgrade bulletin-board ./bulletin-board/ --dry-run | grep replicas
 ```
+
+---
+
+## Архитектура
+
+- [Концепция: Blue-Green деплой в вакууме](../docs/architecture/level-7-helm/concept.html) — мгновенное атомарное переключение трафика, без привязки к Helm
+- [Реализация: реальный Helm-чарт](../docs/architecture/level-7-helm/implementation.html) — templates + values.yaml → готовые манифесты
+- [Боль → решение: Level 5 → Level 7](../docs/architecture/level-7-helm/pain-solution.html) — от разрозненных kubectl apply к версионированным релизам
+
+Сетевой схемы для этого уровня нет: топология в кластере та же, что на Level 5 — Helm меняет только способ доставки манифестов, не сеть (см. [network Level 5](../docs/architecture/level-5-kubernetes/network.html)).
+
+Диаграммы — самодостаточные `.html` файлы (переключатель темы, экспорт в PNG/SVG в браузере). GitHub покажет только исходный код — открывай файл локально в браузере.

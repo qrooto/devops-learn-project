@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 6 → Level 6.5: боль и решение",
+    "subtitle": "Было: ручная интерпретация алертов в 2 ночи → Стало: агент уже объяснил ПОЧЕМУ",
+    "output": "pain-solution.html"
+  },
+  "components": [
+    { "id": "alert_b", "type": "security", "label": "Алерт в Telegram", "sublabel": "'error_rate > 5%'", "pos": [40, 140], "size": [180, 84] },
+    { "id": "oncall_b", "type": "external", "label": "Дежурный в 2 ночи", "tag": "сам открывает Grafana и Loki, гадает причину", "pos": [300, 140], "size": [210, 84] },
+
+    { "id": "alert_a", "type": "security", "label": "Алерт", "pos": [40, 420], "size": [130, 84] },
+    { "id": "agent_a", "type": "backend", "label": "AI Agent", "tag": "уже собрал контекст и объяснил ПОЧЕМУ", "pos": [250, 420], "size": [210, 84] },
+    { "id": "oncall_a", "type": "external", "label": "Дежурный", "tag": "просто Approve / Reject", "pos": [540, 420], "size": [170, 84] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "ДО — Level 6", "wraps": ["alert_b", "oncall_b"] },
+    { "kind": "region", "label": "ПОСЛЕ — Level 6.5", "wraps": ["alert_a", "agent_a", "oncall_a"] }
+  ],
+  "connections": [
+    { "from": "alert_b", "to": "oncall_b", "label": "только 'что', не 'почему'", "variant": "security", "labelDy": -46 },
+    { "from": "alert_a", "to": "agent_a", "variant": "emphasis" },
+    { "from": "agent_a", "to": "oncall_a", "label": "готовый диагноз + предложение", "variant": "emphasis", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Было", "items": [
+      "Алерт говорит ЧТО сломалось (error_rate > 5%), но не ПОЧЕМУ — дежурный сам открывает Grafana и Loki и сопоставляет вручную, часто в 2 ночи после третьего алерта за смену"
+    ]},
+    { "dot": "emerald", "title": "Стало", "items": [
+      "Агент сам собирает метрики и логи, просит LLM объяснить вероятную причину и предлагает конкретное действие — дежурному остаётся Approve или Reject"
+    ]},
+    { "dot": "amber", "title": "Почему это работает", "items": [
+      "Экономится не сама починка (её всё ещё делает человек или заранее одобренное действие), а время на постановку диагноза — обычно самая долгая часть инцидента"
+    ]}
+  ]
+}

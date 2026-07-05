@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Blue-Green деплой — концепция",
+    "subtitle": "Мгновенное атомарное переключение трафика между двумя окружениями",
+    "output": "concept.html"
+  },
+  "components": [
+    { "id": "client1", "type": "external", "label": "Пользователи", "pos": [20, 140], "size": [140, 84] },
+    { "id": "router1", "type": "cloud", "label": "Router / Service", "sublabel": "selector решает куда", "pos": [230, 140], "size": [180, 84] },
+    { "id": "blue1", "type": "backend", "label": "Blue", "tag": "100% трафика", "pos": [480, 140], "size": [140, 84] },
+    { "id": "green1", "type": "backend", "label": "Green", "tag": "0%, тестируется отдельно", "pos": [700, 140], "size": [170, 84] },
+    { "id": "tester1", "type": "external", "label": "Тестировщик", "pos": [700, 20], "size": [150, 84] },
+
+    { "id": "client2", "type": "external", "label": "Пользователи", "pos": [20, 420], "size": [140, 84] },
+    { "id": "router2", "type": "cloud", "label": "Router / Service", "sublabel": "selector переключён", "pos": [230, 420], "size": [180, 84] },
+    { "id": "green2", "type": "backend", "label": "Green", "tag": "теперь 100% трафика", "pos": [480, 420], "size": [160, 84] },
+    { "id": "blue2", "type": "backend", "label": "Blue", "tag": "0%, можно удалить", "pos": [700, 420], "size": [160, 84] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "ДО переключения", "wraps": ["router1", "blue1", "green1"] },
+    { "kind": "region", "label": "ПОСЛЕ переключения", "wraps": ["router2", "green2", "blue2"] }
+  ],
+  "connections": [
+    { "from": "client1", "to": "router1", "variant": "default" },
+    { "from": "router1", "to": "blue1", "label": "100% трафика", "variant": "emphasis", "labelDy": -46 },
+    { "from": "tester1", "to": "green1", "label": "прямая проверка, в обход router", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+
+    { "from": "client2", "to": "router2", "variant": "default" },
+    { "from": "router2", "to": "green2", "label": "100% трафика", "variant": "emphasis", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "Переключение — это смена selector'а на роутере, а не передеплой: система мгновенно обновляет маршрутизацию, ни один запрос не теряется",
+      "Blue и Green — полностью идентичная инфраструктура, отличается только версия кода: это дороже rolling update (двойные ресурсы на время параллельной работы), зато откат — обратное переключение за секунды, а не повторный деплой",
+      "Тестировщик может достучаться до Green напрямую, в обход роутера — обычные пользователи ничего не знают о существовании Green, пока переключения не произошло"
+    ]},
+    { "dot": "amber", "title": "Blue-Green vs Rolling vs Canary", "items": [
+      "Rolling: экономнее по ресурсам, но старая и новая версия работают ОДНОВРЕМЕННО на части трафика — не годится при breaking changes API",
+      "Canary: постепенный процент трафика на новую версию — компромисс между риском и скоростью, сложнее в реализации, чем blue-green"
+    ]}
+  ]
+}

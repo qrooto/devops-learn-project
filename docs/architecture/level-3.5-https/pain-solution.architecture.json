@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 3 → Level 3.5: боль и решение",
+    "subtitle": "Было: HTTP в открытом виде → Стало: TLS termination на границе",
+    "output": "pain-solution.html"
+  },
+  "components": [
+    {
+      "id": "client_b",
+      "type": "external",
+      "label": "Клиент",
+      "pos": [
+        40,
+        140
+      ],
+      "size": [
+        120,
+        84
+      ]
+    },
+    {
+      "id": "nginx_b",
+      "type": "cloud",
+      "label": "nginx",
+      "tag": "MITM видит логин и JWT",
+      "pos": [
+        280,
+        140
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "backend_b",
+      "type": "backend",
+      "label": "backend",
+      "pos": [
+        540,
+        140
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "client_a",
+      "type": "external",
+      "label": "Клиент",
+      "pos": [
+        40,
+        420
+      ],
+      "size": [
+        120,
+        84
+      ]
+    },
+    {
+      "id": "traefik_a",
+      "type": "cloud",
+      "label": "Traefik",
+      "tag": "TLS termination, MITM видит только шум",
+      "pos": [
+        280,
+        420
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "backend_a",
+      "type": "backend",
+      "label": "backend",
+      "tag": "plaintext, но внутри изолированной сети",
+      "pos": [
+        550,
+        420
+      ],
+      "size": [
+        170,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "ДО — Level 3",
+      "wraps": [
+        "nginx_b",
+        "backend_b"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "ПОСЛЕ — Level 3.5",
+      "wraps": [
+        "traefik_a",
+        "backend_a"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client_b",
+      "to": "nginx_b",
+      "label": "HTTP: логин+JWT открытым текстом",
+      "variant": "security",
+      "labelDy": -46
+    },
+    {
+      "from": "nginx_b",
+      "to": "backend_b",
+      "variant": "default"
+    },
+    {
+      "from": "client_a",
+      "to": "traefik_a",
+      "label": "HTTPS: зашифровано TLS",
+      "variant": "emphasis",
+      "labelDy": -46
+    },
+    {
+      "from": "traefik_a",
+      "to": "backend_a",
+      "label": "HTTP plaintext (внутри docker-сети)",
+      "variant": "dashed",
+      "labelAt": [
+        505,
+        416
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Было",
+      "items": [
+        "HTTP: логин/пароль и JWT-токен передаются открытым текстом — любой на пути (Wi-Fi, ISP, промежуточный proxy) может их прочитать"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Стало",
+      "items": [
+        "Traefik терминирует TLS на границе VPS — снаружи виден только шифрованный HTTPS, сертификат подтверждает подлинность сервера"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Почему это работает",
+      "items": [
+        "Внутри docker-сети трафик остаётся plaintext, но это приемлемо: она недостижима снаружи VPS (см. network-схему Level 1) — расшифрованные данные не покидают доверенный периметр"
+      ]
+    }
+  ]
+}

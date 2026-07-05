@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 9 — реальный main.tf",
+    "subtitle": "provider docker: локальные контейнеры теми же средствами, что и облачные VM",
+    "output": "implementation.html"
+  },
+  "components": [
+    {
+      "id": "tf",
+      "type": "frontend",
+      "label": "main.tf",
+      "sublabel": "provider: docker (локально)",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "network",
+      "type": "cloud",
+      "label": "docker_network.app",
+      "sublabel": "bridge",
+      "pos": [
+        300,
+        300
+      ],
+      "size": [
+        190,
+        84
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "docker_container.postgres",
+      "tag": "пароль через var.db_password",
+      "pos": [
+        590,
+        140
+      ],
+      "size": [
+        220,
+        84
+      ]
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "docker_container.backend",
+      "tag": "triggers: пересобрать при смене version",
+      "pos": [
+        590,
+        320
+      ],
+      "size": [
+        220,
+        84
+      ]
+    },
+    {
+      "id": "nginx",
+      "type": "frontend",
+      "label": "docker_container.nginx",
+      "sublabel": "ports: {var.nginx_port}:80",
+      "pos": [
+        590,
+        500
+      ],
+      "size": [
+        200,
+        84
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "tf",
+      "to": "network",
+      "variant": "default"
+    },
+    {
+      "from": "network",
+      "to": "postgres",
+      "variant": "default"
+    },
+    {
+      "from": "network",
+      "to": "backend",
+      "variant": "default"
+    },
+    {
+      "from": "network",
+      "to": "nginx",
+      "variant": "default"
+    },
+    {
+      "from": "postgres",
+      "to": "backend",
+      "label": "DATABASE_URL по имени контейнера",
+      "variant": "dashed",
+      "labelAt": [
+        700,
+        136
+      ]
+    },
+    {
+      "from": "backend",
+      "to": "nginx",
+      "label": "depends_on",
+      "variant": "dashed",
+      "labelAt": [
+        690,
+        316
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "provider docker — не облако: Terraform здесь управляет ЛОКАЛЬНЫМИ Docker-контейнерами теми же средствами, которыми в проде управляют VM в AWS/GCP — это учебный шаг перед реальным облачным провайдером",
+        "backend \"local\" { path = \"terraform.tfstate\" } — состояние хранится локальным файлом; README прямо предупреждает никогда не коммитить его в Git",
+        "triggers = { version = var.backend_version } — принудительно пересобирает docker_image при смене версии, иначе Terraform не заметит, что образ должен обновиться"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Что не показано на схеме",
+      "items": [
+        "docker_volume.postgres_data — именованный volume для персистентности данных, управляется Terraform так же, как и контейнеры"
+      ]
+    }
+  ]
+}

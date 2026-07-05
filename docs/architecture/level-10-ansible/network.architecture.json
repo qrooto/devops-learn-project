@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 10 — сетевой путь: SSH fan-out",
+    "subtitle": "Control node всегда инициирует соединение, узлы никогда не звонят обратно",
+    "output": "network.html"
+  },
+  "components": [
+    {
+      "id": "control",
+      "type": "cloud",
+      "label": "Control node",
+      "sublabel": "твоя машина, ansible-playbook",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        200,
+        84
+      ]
+    },
+    {
+      "id": "node1",
+      "type": "backend",
+      "label": "devops-vm-1",
+      "sublabel": "192.168.1.100 :22",
+      "pos": [
+        340,
+        140
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "node2",
+      "type": "backend",
+      "label": "devops-vm-2",
+      "sublabel": "192.168.1.101 :22",
+      "pos": [
+        340,
+        300
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "localhost",
+      "type": "backend",
+      "label": "localhost",
+      "tag": "connection=local, SSH не используется",
+      "pos": [
+        340,
+        460
+      ],
+      "size": [
+        200,
+        84
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "control",
+      "to": "node1",
+      "label": "SSH :22 (control инициирует)",
+      "variant": "emphasis",
+      "labelAt": [
+        290,
+        136
+      ]
+    },
+    {
+      "from": "control",
+      "to": "node2",
+      "label": "SSH :22",
+      "variant": "emphasis"
+    },
+    {
+      "from": "control",
+      "to": "localhost",
+      "label": "локальный exec, БЕЗ сети",
+      "variant": "dashed",
+      "labelAt": [
+        290,
+        296
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "Control node ВСЕГДА инициирует соединение — управляемые узлы никогда не звонят обратно control node'у; это исходящие TCP-соединения от одного узла к многим",
+        "connection=local для localhost означает, что Ansible вообще не использует сеть для этого хоста — выполняет модули напрямую как локальные процессы",
+        "forks (по умолчанию 5 в ansible.cfg) — сколько узлов настраиваются ПАРАЛЛЕЛЬНО; при 50 серверах и forks=5 они настраиваются волнами по 5, а не все разом"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Сегменты сети на этой схеме",
+      "items": [
+        "Control node — единственная точка, откуда исходит управляющий трафик",
+        "Managed nodes принимают только SSH на :22 — им не нужен ни один другой открытый порт для управления"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Теория глубже",
+      "items": [
+        "../networking-theory/09-ssh-fanout.html — SSH-ключи на много узлов и ControlMaster/ControlPersist"
+      ]
+    }
+  ]
+}

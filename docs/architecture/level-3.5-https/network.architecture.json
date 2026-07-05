@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 3.5 — сетевой путь запроса",
+    "subtitle": "TLS termination на границе VPS, plaintext только внутри docker-сети",
+    "output": "network.html"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Клиент",
+      "sublabel": "браузер",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "letsencrypt",
+      "type": "external",
+      "label": "Let's Encrypt CA",
+      "pos": [
+        40,
+        120
+      ],
+      "size": [
+        160,
+        84
+      ]
+    },
+    {
+      "id": "ufw",
+      "type": "security",
+      "label": "ufw",
+      "sublabel": "allow 80,443 (+22 SSH)",
+      "tag": "8080 ТОЖЕ published!",
+      "pos": [
+        270,
+        300
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "traefik",
+      "type": "cloud",
+      "label": "Traefik",
+      "sublabel": "хост :80,:443,:8080 → контейнер",
+      "tag": "TLS termination здесь",
+      "pos": [
+        530,
+        300
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "dashboard",
+      "type": "security",
+      "label": "Traefik dashboard",
+      "sublabel": ":8080, insecure: true",
+      "tag": "БЕЗ аутентификации!",
+      "pos": [
+        530,
+        500
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "backend",
+      "sublabel": "TCP :8000",
+      "tag": "порт НЕ published",
+      "pos": [
+        800,
+        200
+      ],
+      "size": [
+        160,
+        84
+      ]
+    },
+    {
+      "id": "nginx",
+      "type": "frontend",
+      "label": "nginx",
+      "sublabel": "TCP :80",
+      "tag": "порт НЕ published",
+      "pos": [
+        800,
+        400
+      ],
+      "size": [
+        160,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "VPS хост — публичный IP (видно снаружи)",
+      "wraps": [
+        "ufw",
+        "traefik",
+        "dashboard"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "docker network bridge — только внутри хоста",
+      "wraps": [
+        "backend",
+        "nginx"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client",
+      "to": "ufw",
+      "label": "TCP :443 (HTTPS)",
+      "variant": "emphasis",
+      "labelDy": -46
+    },
+    {
+      "from": "letsencrypt",
+      "to": "ufw",
+      "label": "ACME challenge :80",
+      "variant": "dashed",
+      "labelAt": [
+        235,
+        116
+      ]
+    },
+    {
+      "from": "ufw",
+      "to": "traefik",
+      "label": "ALLOW → TLS termination",
+      "variant": "emphasis",
+      "labelAt": [
+        485,
+        296
+      ]
+    },
+    {
+      "from": "ufw",
+      "to": "dashboard",
+      "label": "ALLOW (случайно тоже открыт)",
+      "variant": "security"
+    },
+    {
+      "from": "traefik",
+      "to": "backend",
+      "label": "HTTP plaintext :8000",
+      "variant": "default",
+      "labelAt": [
+        755,
+        196
+      ]
+    },
+    {
+      "from": "traefik",
+      "to": "nginx",
+      "label": "HTTP plaintext :80",
+      "variant": "default",
+      "labelAt": [
+        755,
+        296
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "Traefik dashboard (:8080) в этом конфиге поднят с insecure: true — то есть БЕЗ аутентификации. Порт published в docker-compose (ports: \"8080:8080\"), значит любой, кто достучится до него снаружи, видит все роуты и конфигурацию — классическая дыра, в проде dashboard либо закрывают auth-мидлварой, либо не публикуют вовсе",
+        "TLS termination происходит НА Traefik — после расшифровки трафик к backend/nginx идёт HTTP plaintext, это безопасно только потому что docker-сеть недостижима снаружи VPS",
+        "ACME httpChallenge требует порт 80 открытым НАРУЖУ даже если весь пользовательский трафик идёт на 443 — иначе Let's Encrypt не сможет подтвердить владение доменом"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Сегменты сети на этой схеме",
+      "items": [
+        "Публичный сегмент: ufw + Traefik (+ по ошибке dashboard)",
+        "Приватный сегмент (docker network): backend и nginx получают только расшифрованный, уже прошедший TLS трафик"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Теория глубже",
+      "items": [
+        "../networking-theory/06-tls-handshake.html — что происходит в момент 'HTTPS' до первого байта приложения"
+      ]
+    }
+  ]
+}

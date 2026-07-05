@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 5 — сетевой путь запроса в кластере",
+    "subtitle": "NodePort → kube-proxy → ClusterIP (виртуальный) → Pod, с резолвом через CoreDNS",
+    "output": "network.html"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Клиент",
+      "pos": [
+        20,
+        340
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "nodeentry",
+      "type": "security",
+      "label": "Node :30080",
+      "sublabel": "NodePort",
+      "tag": "единственный вход снаружи",
+      "pos": [
+        230,
+        340
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "kubeproxy",
+      "type": "cloud",
+      "label": "kube-proxy",
+      "sublabel": "iptables/IPVS правила",
+      "tag": "выбирает Pod для Service",
+      "pos": [
+        470,
+        340
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "nginxpod",
+      "type": "frontend",
+      "label": "Pod nginx",
+      "pos": [
+        720,
+        200
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "coredns",
+      "type": "security",
+      "label": "CoreDNS",
+      "tag": "backend.bulletin-board.svc.cluster.local",
+      "pos": [
+        720,
+        40
+      ],
+      "size": [
+        220,
+        84
+      ]
+    },
+    {
+      "id": "backendsvc",
+      "type": "cloud",
+      "label": "Service backend",
+      "sublabel": "ClusterIP — виртуальный IP",
+      "pos": [
+        960,
+        340
+      ],
+      "size": [
+        190,
+        84
+      ]
+    },
+    {
+      "id": "backendpod",
+      "type": "backend",
+      "label": "один из 3× Pod backend",
+      "pos": [
+        960,
+        500
+      ],
+      "size": [
+        190,
+        84
+      ]
+    },
+    {
+      "id": "postgressvc",
+      "type": "database",
+      "label": "Service postgres",
+      "sublabel": "ClusterIP",
+      "pos": [
+        720,
+        500
+      ],
+      "size": [
+        180,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Cluster (minikube node)",
+      "wraps": [
+        "nodeentry",
+        "kubeproxy",
+        "nginxpod",
+        "coredns",
+        "backendsvc",
+        "backendpod",
+        "postgressvc"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "namespace: bulletin-board",
+      "wraps": [
+        "nginxpod",
+        "backendsvc",
+        "backendpod",
+        "postgressvc"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client",
+      "to": "nodeentry",
+      "label": "TCP :30080",
+      "variant": "emphasis",
+      "labelDy": -46
+    },
+    {
+      "from": "nodeentry",
+      "to": "kubeproxy",
+      "label": "iptables DNAT",
+      "variant": "emphasis",
+      "labelDy": -46
+    },
+    {
+      "from": "kubeproxy",
+      "to": "nginxpod",
+      "label": "→ Pod nginx",
+      "variant": "default",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "from": "nginxpod",
+      "to": "coredns",
+      "label": "резолв 'backend'",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "nginxpod",
+      "to": "backendsvc",
+      "label": "TCP :8000 (виртуальный IP)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "backendsvc",
+      "to": "backendpod",
+      "label": "kube-proxy выбирает Pod",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        1055,
+        336
+      ]
+    },
+    {
+      "from": "backendpod",
+      "to": "postgressvc",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "ClusterIP — виртуальный IP без реального сетевого интерфейса; kube-proxy подменяет пакеты через iptables/IPVS так, будто ты стучишься в один стабильный адрес, хотя за ним от 1 до 10 меняющихся Pod'ов",
+        "backend:8000 внутри кластера резолвится через CoreDNS в полное имя backend.bulletin-board.svc.cluster.local — короткое имя работает благодаря search-домену, который Kubernetes прописывает в каждый Pod автоматически",
+        "NodePort 30080 открыт на КАЖДОЙ ноде кластера, даже если Pod nginx физически работает только на одной — kube-proxy перенаправит трафик куда нужно"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Сегменты сети на этой схеме",
+      "items": [
+        "Client → Node: снаружи кластера видно только NodePort",
+        "kube-proxy → Pod: внутри кластерной сети (свой CNI-диапазон IP), недостижимо снаружи — как docker bridge-сеть, но в масштабе кластера"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Теория глубже",
+      "items": [
+        "../networking-theory/07-kubernetes-networking.html — ClusterIP vs NodePort vs LoadBalancer и DNS в кластере"
+      ]
+    }
+  ]
+}

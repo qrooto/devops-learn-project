@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Теория: типы Service в Kubernetes",
+    "subtitle": "ClusterIP vs NodePort vs LoadBalancer — не привязано к проекту",
+    "output": "07-kubernetes-networking.html"
+  },
+  "components": [
+    { "id": "internalclient", "type": "backend", "label": "Другой Pod в кластере", "pos": [20, 140], "size": [190, 84] },
+    { "id": "clusterip", "type": "cloud", "label": "ClusterIP", "tag": "только изнутри кластера", "pos": [320, 140], "size": [170, 84] },
+
+    { "id": "externalclient1", "type": "external", "label": "Внешний клиент", "pos": [20, 340], "size": [170, 84] },
+    { "id": "nodeport", "type": "cloud", "label": "NodePort", "tag": "порт 30000-32767 на КАЖДОЙ ноде", "pos": [320, 340], "size": [190, 84] },
+
+    { "id": "externalclient2", "type": "external", "label": "Внешний клиент", "pos": [20, 540], "size": [170, 84] },
+    { "id": "lb", "type": "cloud", "label": "LoadBalancer", "tag": "просит внешний LB у облака", "pos": [320, 540], "size": [190, 84] },
+
+    { "id": "pods", "type": "backend", "label": "Pods", "sublabel": "IP меняется при пересоздании", "pos": [640, 340], "size": [190, 84] }
+  ],
+  "connections": [
+    { "from": "internalclient", "to": "clusterip", "variant": "default" },
+    { "from": "externalclient1", "to": "nodeport", "label": "<NodeIP>:30000-32767", "variant": "emphasis", "labelDy": -46 },
+    { "from": "externalclient2", "to": "lb", "label": "облачный LB → NodePort под капотом", "variant": "dashed", "labelDy": -46 },
+    { "from": "clusterip", "to": "pods", "fromSide": "right", "toSide": "top", "variant": "default" },
+    { "from": "nodeport", "to": "pods", "variant": "emphasis" },
+    { "from": "lb", "to": "pods", "fromSide": "right", "toSide": "bottom", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "ClusterIP (по умолчанию) вообще недостижим снаружи кластера — только для внутренней коммуникации Pod-to-Pod через Service",
+      "NodePort открывает один и тот же порт (диапазон 30000-32767) на ВСЕХ нодах кластера сразу — даже если целевой Pod физически работает только на одной из десяти нод",
+      "LoadBalancer — надстройка над NodePort: облачный провайдер создаёт настоящий внешний балансировщик перед NodePort; без облака (bare metal, minikube) он просто зависает в состоянии pending"
+    ]},
+    { "dot": "amber", "title": "DNS внутри кластера", "items": [
+      "Каждый Service автоматически получает имя <service>.<namespace>.svc.cluster.local через CoreDNS — встроенный аналог docker embedded DNS (Level 1), только в масштабе кластера"
+    ]}
+  ]
+}

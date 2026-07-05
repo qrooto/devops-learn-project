@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Эволюция одной системы: от одного сервера до self-healing production-стека",
+    "subtitle": "13 уровней devops-project — каждый решает боль, которую создал предыдущий",
+    "output": "00-overview.html",
+    "viewBox": [1160, 780]
+  },
+  "components": [
+    { "id": "l0", "type": "security", "label": "0", "sublabel": "VPS Hardening", "tag": "SSH-ключи, firewall", "pos": [40, 100], "size": [180, 84] },
+    { "id": "l1", "type": "backend", "label": "1", "sublabel": "Monolith", "tag": "nginx → backend → postgres", "pos": [260, 100], "size": [180, 84] },
+    { "id": "l2", "type": "backend", "label": "2", "sublabel": "Scaling", "tag": "3× backend + load balancer", "pos": [480, 100], "size": [180, 84] },
+    { "id": "l3", "type": "database", "label": "3", "sublabel": "Caching", "tag": "+ Redis", "pos": [700, 100], "size": [180, 84] },
+    { "id": "l35", "type": "security", "label": "3.5", "sublabel": "HTTPS", "tag": "+ Traefik, TLS", "pos": [920, 100], "size": [180, 84] },
+
+    { "id": "l4", "type": "cloud", "label": "4", "sublabel": "CI/CD (GitLab)", "tag": "автоматический pipeline", "pos": [40, 340], "size": [180, 84] },
+    { "id": "l5", "type": "cloud", "label": "5", "sublabel": "Kubernetes", "tag": "self-healing, автомасштаб", "pos": [260, 340], "size": [180, 84] },
+    { "id": "l6", "type": "database", "label": "6", "sublabel": "Monitoring", "tag": "Prometheus/Grafana/Loki", "pos": [480, 340], "size": [180, 84] },
+    { "id": "l65", "type": "backend", "label": "6.5", "sublabel": "AI Agent", "tag": "LLM диагностирует алерты", "pos": [700, 340], "size": [180, 84] },
+
+    { "id": "l7", "type": "cloud", "label": "7", "sublabel": "Helm", "tag": "версии релизов, blue-green", "pos": [40, 580], "size": [180, 84] },
+    { "id": "l8", "type": "security", "label": "8", "sublabel": "GitOps", "tag": "ArgoCD, Git = истина", "pos": [260, 580], "size": [180, 84] },
+    { "id": "l9", "type": "cloud", "label": "9", "sublabel": "Terraform", "tag": "инфраструктура как код", "pos": [480, 580], "size": [180, 84] },
+    { "id": "l10", "type": "cloud", "label": "10", "sublabel": "Ansible", "tag": "конфигурация N серверов", "pos": [700, 580], "size": [180, 84] }
+  ],
+  "connections": [
+    { "from": "l0", "to": "l1", "variant": "emphasis" },
+    { "from": "l1", "to": "l2", "variant": "emphasis" },
+    { "from": "l2", "to": "l3", "variant": "emphasis" },
+    { "from": "l3", "to": "l35", "variant": "emphasis" },
+    { "from": "l35", "to": "l4", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "via": [[1010, 250], [130, 250]] },
+
+    { "from": "l4", "to": "l5", "variant": "emphasis" },
+    { "from": "l5", "to": "l6", "variant": "emphasis" },
+    { "from": "l6", "to": "l65", "variant": "emphasis" },
+    { "from": "l65", "to": "l7", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "via": [[790, 490], [130, 490]] },
+
+    { "from": "l7", "to": "l8", "variant": "emphasis" },
+    { "from": "l8", "to": "l9", "variant": "emphasis" },
+    { "from": "l9", "to": "l10", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Эра 1 — Основы (0 → 3.5)", "items": [
+      "Один сервер → много серверов → кэш → шифрование. Фундамент, на котором держится всё остальное"
+    ]},
+    { "dot": "emerald", "title": "Эра 2 — Автоматизация доставки (4)", "items": [
+      "Код сам добирается до сервера через pipeline, без ручного SSH и restart"
+    ]},
+    { "dot": "violet", "title": "Эра 3 — Оркестрация и наблюдаемость (5 → 7)", "items": [
+      "Кластер сам себя лечит и масштабирует, ты видишь что происходит, LLM помогает с диагностикой, релизы версионируются"
+    ]},
+    { "dot": "amber", "title": "Эра 4 — Production-grade управление (8 → 10)", "items": [
+      "Git становится источником правды для кластера (GitOps), а инфраструктура и конфигурация серверов — тоже код (Terraform, Ansible)"
+    ]}
+  ]
+}

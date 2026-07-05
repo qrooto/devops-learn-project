@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 0 — реальная настройка VPS",
+    "subtitle": "Ubuntu 22.04, конкретные файлы и команды из level-0-vps-setup/README.md",
+    "output": "implementation.html"
+  },
+  "components": [
+    {
+      "id": "attacker",
+      "type": "external",
+      "label": "Скан-боты",
+      "sublabel": "брутфорс :22 в первые часы",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "ufw",
+      "type": "security",
+      "label": "ufw",
+      "sublabel": "allow 22,80,443/tcp",
+      "tag": "default: deny incoming",
+      "pos": [
+        260,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "sshd",
+      "type": "security",
+      "label": "sshd_config",
+      "sublabel": "PasswordAuthentication no",
+      "tag": "Port 22",
+      "pos": [
+        490,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "fail2ban",
+      "type": "security",
+      "label": "fail2ban",
+      "sublabel": "jail: sshd, bantime 10m",
+      "pos": [
+        490,
+        120
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "keys",
+      "type": "database",
+      "label": "authorized_keys",
+      "sublabel": "~/.ssh/, ed25519 pubkey",
+      "pos": [
+        720,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "user",
+      "type": "backend",
+      "label": "devops",
+      "sublabel": "UID 1001, группа sudo",
+      "pos": [
+        950,
+        300
+      ],
+      "size": [
+        140,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "Периметр VPS — реальные настройки",
+      "wraps": [
+        "ufw",
+        "sshd",
+        "fail2ban"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "attacker",
+      "to": "ufw",
+      "label": "запросы на все порты",
+      "variant": "dashed",
+      "labelAt": [
+        220,
+        296
+      ]
+    },
+    {
+      "from": "ufw",
+      "to": "sshd",
+      "label": "22/tcp пропущен",
+      "variant": "emphasis"
+    },
+    {
+      "from": "sshd",
+      "to": "fail2ban",
+      "label": "неудачные попытки входа",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "fail2ban",
+      "to": "ufw",
+      "label": "ban IP на 10 мин",
+      "variant": "security",
+      "fromSide": "left",
+      "toSide": "top"
+    },
+    {
+      "from": "sshd",
+      "to": "keys",
+      "label": "сверка ключа",
+      "variant": "emphasis"
+    },
+    {
+      "from": "keys",
+      "to": "user",
+      "label": "вход разрешён",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "PasswordAuthentication no применяется только после systemctl restart sshd — включай его ПОСЛЕ того как ключ уже добавлен и протестирован в новой сессии, иначе рискуешь остаться снаружи",
+        "ufw allow 80,443 добавляем заранее, до того как поднимем nginx/Traefik в Level 1 — иначе через несколько уровней придётся вспоминать почему сайт не открывается",
+        "fail2ban-client status sshd — посмотреть забаненные IP; fail2ban-client set sshd unbanip <ip> — снять бан себе, если случайно забанил сам себя"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Что ещё держит систему в форме",
+      "items": [
+        "unattended-upgrades — автоматические security-патчи без ручного apt upgrade",
+        "root-логин по SSH отключён (PermitRootLogin no) — вход только через devops + sudo"
+      ]
+    }
+  ]
+}

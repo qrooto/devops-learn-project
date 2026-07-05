@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Теория: анатомия HTTP-запроса",
+    "subtitle": "Метод, заголовки, коды состояния, statelessness — не привязано к проекту",
+    "output": "03-http-anatomy.html",
+    "viewBox": [860, 700]
+  },
+  "participants": [
+    { "id": "browser", "type": "external", "label": "Клиент", "sublabel": "браузер / curl" },
+    { "id": "server", "type": "backend", "label": "Сервер", "sublabel": "API" }
+  ],
+  "segments": [
+    { "from": 150, "to": 280, "label": "GET — без тела" },
+    { "from": 300, "to": 440, "label": "POST — с телом" },
+    { "from": 460, "to": 580, "label": "Ошибка авторизации" }
+  ],
+  "messages": [
+    { "from": "browser", "to": "server", "y": 190, "label": "GET /api/ads?page=1 HTTP/1.1", "variant": "emphasis", "note": "Host, Accept, Authorization: Bearer <JWT>" },
+    { "from": "server", "to": "browser", "y": 250, "label": "200 OK", "variant": "return", "note": "Content-Type: application/json" },
+
+    { "from": "browser", "to": "server", "y": 340, "label": "POST /api/ads HTTP/1.1", "variant": "emphasis", "note": "Content-Type: application/json, Content-Length: 128" },
+    { "from": "server", "to": "browser", "y": 400, "label": "201 Created", "variant": "return", "note": "Location: /api/ads/42" },
+
+    { "from": "browser", "to": "server", "y": 500, "label": "GET /api/ads/42 (без токена)", "variant": "dashed" },
+    { "from": "server", "to": "browser", "y": 550, "label": "401 Unauthorized", "variant": "security", "note": "WWW-Authenticate: Bearer" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "HTTP — текстовый протокол поверх TCP: первая строка = метод + путь + версия, дальше заголовки, пустая строка, затем (опционально) тело",
+      "Коды состояния группами: 2xx успех, 3xx редирект, 4xx ошибка на стороне клиента (запрос неверный), 5xx ошибка на стороне сервера — первое, на что смотреть при отладке API",
+      "HTTP stateless: сервер не помнит предыдущий запрос — состояние ('залогинен ли я') передаётся явно в каждом запросе через заголовок Authorization или cookie"
+    ]},
+    { "dot": "amber", "title": "Заголовки из этого проекта", "items": [
+      "Authorization: Bearer <JWT> — аутентификация на каждом запросе (level-1 backend/auth.py)",
+      "Content-Type: application/json — формат тела запроса/ответа",
+      "X-Forwarded-For / X-Real-IP — nginx подставляет реальный IP клиента при проксировании (level-1 nginx.conf)"
+    ]}
+  ]
+}

@@ -443,3 +443,17 @@ docker compose logs backend_2
 # Временно увеличить timeout в nginx.conf (proxy_read_timeout):
 # proxy_read_timeout 60s;
 ```
+
+---
+
+## Архитектура
+
+- [Концепция: горизонтальное масштабирование в вакууме](../docs/architecture/level-2-scaling/concept.html) — load balancer + N stateless-воркеров + общее хранилище состояния
+- [Реализация: реальный docker-compose.yml](../docs/architecture/level-2-scaling/implementation.html) — nginx upstream round-robin, backend_1/2/3, один общий postgres
+- [Боль → решение: Level 1 → Level 2](../docs/architecture/level-2-scaling/pain-solution.html) — было/стало/почему это работает и где новый предел
+- [Сеть: балансировка внутри docker-сети](../docs/architecture/level-2-scaling/network.html) — снаружи VPS по-прежнему виден только порт 80, выбор инстанса скрыт внутри
+
+**Теория сетей глубже:**
+- [Алгоритмы балансировки нагрузки](../docs/architecture/networking-theory/05-load-balancing-algorithms.html) — round robin vs least connections vs ip hash, где у каждого предел
+
+Диаграммы — самодостаточные `.html` файлы (переключатель темы, экспорт в PNG/SVG в браузере). GitHub покажет только исходный код — открывай файл локально в браузере.

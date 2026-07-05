@@ -1672,6 +1672,9 @@ A: Безопасный способ изменить схему без оста
 **Q: В чём разница `CREATE INDEX` vs `CREATE INDEX CONCURRENTLY`?**
 A: Обычный CREATE INDEX блокирует таблицу на всё время построения (минуты на большой таблице). CONCURRENTLY строит без блокировки: работает медленнее, требует двух проходов, нельзя в транзакции — зато таблица доступна для чтения и записи. В production — всегда CONCURRENTLY для существующих таблиц.
 
+**Q: Какие есть стратегии деплоя и когда что применять?**
+A: Recreate — стоп всё/старт всё, есть даунтайм, зато нет двух версий одновременно (для stateful). Rolling — по одному, zero downtime, но v1 и v2 работают параллельно (нужна обратная совместимость API). Blue-Green — два окружения, мгновенный switch и rollback, двойные ресурсы. Canary — малый % трафика на новую версию, безопасно для рискованных изменений. Feature flags — четвёртый вариант без деплоя.
+
 ### Итог уровня 4
 
 Ты умеешь:
@@ -2241,6 +2244,17 @@ kubectl describe pod <name> -n bulletin-board
 | `kubectl top pods -n bulletin-board` | CPU/RAM Pod-ов |
 | `minikube dashboard` | Веб-интерфейс |
 
+### На собеседовании спросят — Уровень 5
+
+**Q: В чём разница Rolling Update, Blue-Green и Canary?**
+A: Rolling: обновляет Pod-ы по одному, v1 и v2 параллельно, откат = новый деплой (медленно). Blue-Green: два полных окружения, мгновенный switch selector, мгновенный rollback, но двойные ресурсы. Canary: 10-20% трафика на новую версию, градуальное увеличение — минимальный риск для пользователей.
+
+**Q: Как реализовать Blue-Green в Kubernetes?**
+A: Два Deployment с labels `color=blue` и `color=green`. Service selector — `{color: blue}`. При деплое создать green, дождаться readiness, `kubectl patch service` → `color=green`. Rollback = patch обратно.
+
+**Q: Как реализовать Canary через K8s без ingress-controller?**
+A: Два Deployment, оба с label `app=backend`. Service выбирает всех по этому label. Пропорция реплик = пропорция трафика: `stable replicas=4, canary replicas=1` → 80/20. Graduate: обновить stable на v2, удалить canary.
+
 ### Итог уровня 5
 
 Ты умеешь:
@@ -2250,6 +2264,8 @@ kubectl describe pod <name> -n bulletin-board
 - [ ] Делать rolling update и откатывать его
 - [ ] Настроить HPA для автомасштабирования
 - [ ] Разбирать CrashLoopBackOff и OOMKilled
+- [ ] Выполнить Blue-Green деплой и мгновенный rollback через selector
+- [ ] Выполнить Canary: 20% трафика, наблюдение метрик, graduate или rollback
 
 **Боль которую ты чувствуешь:** при инциденте ты слепой. Не видно что происходит внутри кластера: сколько запросов, какое время ответа, где ошибки. Нужен мониторинг → Уровень 6.
 

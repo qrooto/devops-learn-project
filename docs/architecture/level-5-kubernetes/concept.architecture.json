@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Оркестрация контейнеров — концепция",
+    "subtitle": "Декларативное желаемое состояние вместо ручных команд",
+    "output": "concept.html"
+  },
+  "components": [
+    { "id": "manifest", "type": "frontend", "label": "Манифест (YAML)", "sublabel": "желаемое состояние", "pos": [40, 300], "size": [180, 84] },
+    { "id": "controlplane", "type": "cloud", "label": "Control plane", "sublabel": "API server + controller + scheduler", "tag": "постоянно сверяет факт с желаемым", "pos": [320, 300], "size": [230, 84] },
+    { "id": "node", "type": "backend", "label": "Node", "sublabel": "Pod × N", "pos": [660, 300], "size": [150, 84] }
+  ],
+  "connections": [
+    { "from": "manifest", "to": "controlplane", "label": "kubectl apply", "variant": "emphasis", "labelDy": -46 },
+    { "from": "controlplane", "to": "node", "label": "schedule + непрерывно сверяет факт", "variant": "emphasis", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "Kubernetes не выполняет команды 'сделай X' — ты декларируешь 'хочу, чтобы было так', control plane постоянно сравнивает факт с желаемым и сам действует при расхождении (reconciliation loop)",
+      "Никогда не создавай Pod напрямую — Deployment описывает 'хочу N копий', если Pod умрёт, Deployment пересоздаст его без твоего участия",
+      "Это другой уровень абстракции, чем docker-compose: там ты сам перезапускаешь упавший контейнер, здесь пересоздание встроено в саму систему"
+    ]},
+    { "dot": "amber", "title": "Reconciliation loop", "items": [
+      "Каждый controller в control plane работает по циклу: наблюдать факт → сравнить с желаемым → предпринять действие → повторить",
+      "Это происходит непрерывно и для любого объекта (Pod, Service, ConfigMap...), не только при kubectl apply"
+    ]}
+  ]
+}

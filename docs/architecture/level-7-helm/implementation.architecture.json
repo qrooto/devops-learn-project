@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 7 — реальный Helm-чарт",
+    "subtitle": "bulletin-board: templates + values.yaml → готовые манифесты",
+    "output": "implementation.html"
+  },
+  "components": [
+    {
+      "id": "chart",
+      "type": "frontend",
+      "label": "Chart: bulletin-board",
+      "sublabel": "Chart.yaml + templates/",
+      "pos": [
+        40,
+        140
+      ],
+      "size": [
+        200,
+        84
+      ]
+    },
+    {
+      "id": "values",
+      "type": "database",
+      "label": "values.yaml",
+      "sublabel": "backend.replicas: 3, ...",
+      "tag": "твои параметры / --set",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        190,
+        84
+      ]
+    },
+    {
+      "id": "helm",
+      "type": "backend",
+      "label": "helm install/upgrade",
+      "tag": "подставляет Values в Go-шаблоны",
+      "pos": [
+        340,
+        240
+      ],
+      "size": [
+        210,
+        84
+      ]
+    },
+    {
+      "id": "rendered",
+      "type": "cloud",
+      "label": "Готовые манифесты",
+      "sublabel": "namespace, backend, postgres, redis, nginx",
+      "pos": [
+        650,
+        240
+      ],
+      "size": [
+        220,
+        84
+      ]
+    },
+    {
+      "id": "cluster",
+      "type": "backend",
+      "label": "kubectl apply",
+      "sublabel": "выполняется автоматически",
+      "pos": [
+        950,
+        240
+      ],
+      "size": [
+        170,
+        84
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "chart",
+      "to": "helm",
+      "label": "templates/*.yaml",
+      "variant": "default",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "values",
+      "to": "helm",
+      "label": "--set или -f values-prod.yaml",
+      "variant": "default",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelAt": [
+        285,
+        236
+      ]
+    },
+    {
+      "from": "helm",
+      "to": "rendered",
+      "label": "helm template",
+      "variant": "emphasis"
+    },
+    {
+      "from": "rendered",
+      "to": "cluster",
+      "label": "применяется в кластер",
+      "variant": "emphasis",
+      "labelAt": [
+        910,
+        236
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "{{ .Values.backend.replicas }} в templates/backend.yaml подставляется значением из values.yaml ИЛИ переопределяется через --set backend.replicas=5 в момент установки — один шаблон, разные окружения",
+        "helm history bulletin-board хранит все прошлые релизы — helm rollback bulletin-board 3 откатывает к третьей ревизии одной командой, без ручного применения старых манифестов",
+        "postgres.password: postgres лежит в values.yaml открытым текстом — README сам предупреждает заменить на Kubernetes Secret из внешнего хранилища в production, тот же антипаттерн, что и захардкоженный пароль Grafana на Level 6"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "helm lint и helm template",
+      "items": [
+        "helm template ./bulletin-board/ показывает финальные манифесты БЕЗ применения в кластер — способ проверить результат подстановки заранее",
+        "helm lint ловит синтаксические и структурные ошибки в чарте до попытки установки"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 1 → Level 2: боль и решение",
+    "subtitle": "Было: один backend не тянет нагрузку → Стало: 3 инстанса + round-robin",
+    "output": "pain-solution.html"
+  },
+  "components": [
+    {
+      "id": "client_b",
+      "type": "external",
+      "label": "Клиент",
+      "pos": [
+        40,
+        140
+      ],
+      "size": [
+        120,
+        84
+      ]
+    },
+    {
+      "id": "nginx_b",
+      "type": "cloud",
+      "label": "nginx",
+      "sublabel": "proxy_pass",
+      "pos": [
+        250,
+        140
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "backend_b",
+      "type": "backend",
+      "label": "backend",
+      "sublabel": "1 инстанс",
+      "tag": "CPU 100%, очередь растёт",
+      "pos": [
+        460,
+        140
+      ],
+      "size": [
+        160,
+        84
+      ]
+    },
+    {
+      "id": "db_b",
+      "type": "database",
+      "label": "postgres",
+      "pos": [
+        700,
+        140
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "client_a",
+      "type": "external",
+      "label": "Клиент",
+      "pos": [
+        40,
+        400
+      ],
+      "size": [
+        120,
+        84
+      ]
+    },
+    {
+      "id": "nginx_a",
+      "type": "cloud",
+      "label": "nginx",
+      "sublabel": "upstream",
+      "pos": [
+        250,
+        400
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "workers_a",
+      "type": "backend",
+      "label": "3× backend",
+      "sublabel": "round-robin",
+      "tag": "нагрузка размазана",
+      "pos": [
+        460,
+        400
+      ],
+      "size": [
+        160,
+        84
+      ]
+    },
+    {
+      "id": "db_a",
+      "type": "database",
+      "label": "postgres",
+      "tag": "теперь x3 нагрузки",
+      "pos": [
+        700,
+        400
+      ],
+      "size": [
+        140,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "ДО — Level 1",
+      "wraps": [
+        "nginx_b",
+        "backend_b",
+        "db_b"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "ПОСЛЕ — Level 2",
+      "wraps": [
+        "nginx_a",
+        "workers_a",
+        "db_a"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client_b",
+      "to": "nginx_b",
+      "label": "HTTP",
+      "variant": "default",
+      "labelDy": -10
+    },
+    {
+      "from": "nginx_b",
+      "to": "backend_b",
+      "label": "весь трафик → 1 процесс",
+      "variant": "security",
+      "labelAt": [
+        425,
+        136
+      ]
+    },
+    {
+      "from": "backend_b",
+      "to": "db_b",
+      "variant": "default"
+    },
+    {
+      "from": "client_a",
+      "to": "nginx_a",
+      "label": "HTTP",
+      "variant": "default",
+      "labelDy": -10
+    },
+    {
+      "from": "nginx_a",
+      "to": "workers_a",
+      "label": "round-robin на 3",
+      "variant": "emphasis",
+      "labelAt": [
+        425,
+        396
+      ]
+    },
+    {
+      "from": "workers_a",
+      "to": "db_a",
+      "label": "×3 подключений",
+      "variant": "security",
+      "labelDy": -10
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Было",
+      "items": [
+        "Один backend-процесс принимает весь трафик — под нагрузочным тестом (wrk/k6) очередь запросов растёт, время ответа деградирует, появляются таймауты"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Стало",
+      "items": [
+        "3 инстанса backend за nginx upstream с round-robin — нагрузка размазана, единичный сбой одного инстанса не роняет весь сервис (proxy_next_upstream переключает на другой)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Почему это работает — и где предел",
+      "items": [
+        "Каждый добавленный инстанс почти линейно увеличивает пропускную способность CPU/RAM, пока не упрёшься в следующий общий ресурс",
+        "Этот следующий ресурс уже виден на схеме: postgres теперь получает втрое больше соединений — это боль, которую решает Level 3 (Redis-кэш + индексы)"
+      ]
+    }
+  ]
+}

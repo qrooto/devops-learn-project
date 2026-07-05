@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 4 (GitLab) — реальный pipeline",
+    "subtitle": "gitlab-ce + gitlab-runner, .gitlab-ci.yml: test → build → deploy (manual gate)",
+    "output": "implementation.html"
+  },
+  "components": [
+    { "id": "dev", "type": "external", "label": "Разработчик", "pos": [40, 300], "size": [140, 84] },
+    { "id": "gitlab", "type": "cloud", "label": "gitlab-ce:17.5.2", "sublabel": ":8929 HTTP, :2222 SSH", "tag": "prometheus/grafana внутри отключены", "pos": [280, 300], "size": [200, 84] },
+    { "id": "runner", "type": "backend", "label": "gitlab-runner", "sublabel": "executor: docker", "tag": "docker.sock + privileged", "pos": [580, 180], "size": [180, 84] },
+    { "id": "registry", "type": "database", "label": "Container Registry", "sublabel": "$CI_REGISTRY_IMAGE/backend", "pos": [580, 420], "size": [190, 84] },
+    { "id": "prod", "type": "cloud", "label": "Production VPS", "sublabel": "level-3-caching/docker-compose", "tag": "rolling: по одному backend_N", "pos": [860, 300], "size": [190, 84] }
+  ],
+  "connections": [
+    { "from": "dev", "to": "gitlab", "label": "git push :2222 или :8929", "variant": "emphasis", "labelDy": -46 },
+    { "from": "gitlab", "to": "runner", "label": "триггерит job", "variant": "emphasis", "fromSide": "top", "toSide": "left" },
+    { "from": "runner", "to": "registry", "label": "docker push (dind)", "variant": "default", "fromSide": "bottom", "toSide": "left" },
+    { "from": "runner", "to": "prod", "label": "ssh: pull + up (manual gate)", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "gitlab-runner подключён с --docker-privileged — осознанный компромисс: Docker-in-Docker (dind, нужен для docker build внутри job) требует privileged-режима, что расширяет возможности контейнера-раннера почти до уровня хоста",
+      "deploy-prod: when: manual — деплой в прод требует ручного нажатия кнопки в GitLab UI при каждом запуске, это осознанный gate, а не забытый шаг автоматизации",
+      "Rolling restart руками в скрипте: for svc in backend_1 backend_2 backend_3 { up -d --no-deps $svc; sleep 5 } — по одному инстансу за раз, чтобы не ронять все 3 одновременно"
+    ]},
+    { "dot": "amber", "title": "Чего здесь нет", "items": [
+      "Никакого автоматического отката (rollback) — если новый образ сломан, откатывать приходится руками",
+      "needs: [build-backend, unit-tests] — деплой не начнётся, пока не прошли тесты и не собрался образ"
+    ]}
+  ]
+}

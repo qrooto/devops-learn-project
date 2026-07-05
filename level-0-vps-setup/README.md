@@ -440,3 +440,17 @@ docker system prune -f
 # Почистить старые логи:
 sudo journalctl --vacuum-time=7d
 ```
+
+---
+
+## Архитектура
+
+- [Концепция: VPS hardening в вакууме](../docs/architecture/level-0-vps-setup/concept.html) — default deny + ключи вместо паролей, без привязки к проекту
+- [Реализация: что реально настроено на этом VPS](../docs/architecture/level-0-vps-setup/implementation.html) — ufw, sshd_config, fail2ban с конкретными правилами
+- [Сеть: что видно снаружи VPS](../docs/architecture/level-0-vps-setup/network.html) — какие порты открыты, чем открытый-но-неслушающий порт отличается от заблокированного
+
+**Теория сетей глубже** (общая, не привязана к проекту — пригодится за пределами этого репо):
+- [IP, порт, сокет](../docs/architecture/networking-theory/01-ports-and-sockets.html) — что на самом деле определяет TCP-соединение
+- [TCP-handshake и 3 исхода на firewall](../docs/architecture/networking-theory/02-tcp-handshake-and-firewall.html) — почему RST и тишина от firewall выглядят по-разному и как это использовать при диагностике
+
+Диаграммы — самодостаточные `.html` файлы (переключатель тёмной/светлой темы, экспорт в PNG/SVG прямо в браузере). GitHub покажет только исходный код — открывай файл локально в браузере.

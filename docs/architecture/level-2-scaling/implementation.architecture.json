@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 2 — реальный docker-compose",
+    "subtitle": "nginx upstream round-robin поверх 3 инстансов backend_1/2/3, один общий postgres",
+    "output": "implementation.html"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Браузер",
+      "sublabel": "пользователь",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "nginx",
+      "type": "cloud",
+      "label": "nginx",
+      "sublabel": "ports: 80:80",
+      "tag": "upstream backend {...}",
+      "pos": [
+        260,
+        340
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "b1",
+      "type": "backend",
+      "label": "backend_1",
+      "sublabel": "uvicorn :8000",
+      "pos": [
+        520,
+        140
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "b2",
+      "type": "backend",
+      "label": "backend_2",
+      "sublabel": "uvicorn :8000",
+      "pos": [
+        520,
+        340
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "b3",
+      "type": "backend",
+      "label": "backend_3",
+      "sublabel": "uvicorn :8000",
+      "pos": [
+        520,
+        540
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "postgres",
+      "sublabel": ":5432, ОДИН на всех",
+      "tag": "новое узкое место",
+      "pos": [
+        780,
+        340
+      ],
+      "size": [
+        160,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "docker-compose: default bridge network",
+      "wraps": [
+        "nginx",
+        "b1",
+        "b2",
+        "b3",
+        "postgres"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client",
+      "to": "nginx",
+      "label": "HTTP :80",
+      "variant": "emphasis",
+      "labelDy": -10
+    },
+    {
+      "from": "nginx",
+      "to": "b1",
+      "label": "upstream (round-robin)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "nginx",
+      "to": "b2",
+      "variant": "default"
+    },
+    {
+      "from": "nginx",
+      "to": "b3",
+      "variant": "default"
+    },
+    {
+      "from": "b1",
+      "to": "postgres",
+      "variant": "default"
+    },
+    {
+      "from": "b2",
+      "to": "postgres",
+      "label": "DATABASE_URL (общий для всех 3)",
+      "variant": "emphasis",
+      "labelAt": [
+        725,
+        336
+      ]
+    },
+    {
+      "from": "b3",
+      "to": "postgres",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "upstream backend { server backend_1:8000; server backend_2:8000; server backend_3:8000; } резолвит все три DNS-имени при старте nginx — если какой-то контейнер ещё не поднялся, важно, чтобы nginx стартовал после",
+        "proxy_next_upstream error timeout http_502 http_503 — если инстанс не отвечает, nginx автоматически пробует следующий по списку; клиент этого не заметит",
+        "Все три backend_N используют один и тот же DATABASE_URL — три инстанса создают втрое больше одновременных соединений к ОДНОЙ базе"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Что уже не так",
+      "items": [
+        "Сессии, если они хранились в памяти одного backend_N, теперь ломаются — round-robin раскидывает запросы одного пользователя по разным инстансам",
+        "postgres — единственный компонент без репликации на этой схеме, он и станет следующей болью (Level 3)"
+      ]
+    }
+  ]
+}

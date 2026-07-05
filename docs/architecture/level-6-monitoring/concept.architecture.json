@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Pull-based мониторинг — концепция",
+    "subtitle": "Сервер метрик сам приходит и забирает данные — не привязано к проекту",
+    "output": "concept.html"
+  },
+  "components": [
+    { "id": "targets", "type": "backend", "label": "Приложения", "sublabel": "/metrics endpoint", "pos": [40, 300], "size": [170, 84] },
+    { "id": "collector", "type": "cloud", "label": "Time-series DB", "sublabel": "pull: сама забирает данные", "tag": "scrape каждые N секунд", "pos": [340, 300], "size": [200, 84] },
+    { "id": "dashboard", "type": "frontend", "label": "Дашборд", "sublabel": "запросы к истории", "pos": [660, 300], "size": [160, 84] }
+  ],
+  "connections": [
+    { "from": "collector", "to": "targets", "label": "GET /metrics (каждые 15с)", "variant": "emphasis", "labelDy": -46 },
+    { "from": "dashboard", "to": "collector", "label": "запрос на графики", "variant": "default", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "Pull-модель: сервер метрик сам приходит и забирает данные — приложению достаточно отдавать текущее состояние по HTTP, не нужно знать адрес коллектора",
+      "Push-модель (альтернатива, например StatsD/Graphite): приложение само отправляет метрики наружу — полезно для короткоживущих задач (batch jobs), которые не доживут до следующего scrape",
+      "/metrics — просто текстовый HTTP-эндпоинт с ТЕКУЩИМИ счётчиками, не история; вся история накапливается в time-series базе уже после scrape"
+    ]},
+    { "dot": "amber", "title": "Что если target недоступен", "items": [
+      "Пропущенный scrape — это тоже сигнал: если target не отвечает несколько раз подряд, это само по себе повод для алерта (target down)"
+    ]}
+  ]
+}

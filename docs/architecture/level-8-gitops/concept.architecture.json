@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Push vs Pull деплой — концепция",
+    "subtitle": "Где живут credentials и кто инициирует применение изменений",
+    "output": "concept.html"
+  },
+  "components": [
+    { "id": "git1", "type": "database", "label": "Git repo", "sublabel": "источник правды", "pos": [40, 140], "size": [170, 84] },
+    { "id": "ci", "type": "backend", "label": "CI runner", "tag": "credentials к кластеру хранятся СНАРУЖИ", "pos": [320, 140], "size": [200, 84] },
+    { "id": "cluster_push", "type": "cloud", "label": "Kubernetes cluster", "pos": [630, 140], "size": [190, 84] },
+
+    { "id": "git2", "type": "database", "label": "Git repo", "sublabel": "источник правды", "pos": [40, 420], "size": [170, 84] },
+    { "id": "operator", "type": "security", "label": "GitOps operator", "sublabel": "внутри кластера", "tag": "credentials не покидают кластер", "pos": [320, 420], "size": [200, 84] },
+    { "id": "cluster_pull", "type": "cloud", "label": "Kubernetes cluster", "pos": [630, 420], "size": [190, 84] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Push-based CI/CD", "wraps": ["ci", "cluster_push"] },
+    { "kind": "security-group", "label": "Pull-based GitOps", "wraps": ["operator", "cluster_pull"] }
+  ],
+  "connections": [
+    { "from": "git1", "to": "ci", "label": "webhook триггерит", "variant": "default", "labelDy": -46 },
+    { "from": "ci", "to": "cluster_push", "label": "kubectl apply (снаружи внутрь)", "variant": "emphasis", "labelDy": -46 },
+
+    { "from": "operator", "to": "git2", "label": "poll каждые N сек", "variant": "emphasis", "fromSide": "left", "toSide": "right" },
+    { "from": "operator", "to": "cluster_pull", "label": "apply, если есть расхождение", "variant": "emphasis", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "В push-модели CI runner (снаружи кластера) должен иметь credentials на изменение кластера — это секрет, который путешествует и хранится вне кластера",
+      "В pull-модели оператор работает ВНУТРИ кластера и сам смотрит на Git — credentials на доступ к Git обычно read-only и намного менее чувствительны, чем credentials на изменение кластера",
+      "Pull-модель даёт drift detection бесплатно: оператор постоянно сравнивает факт в кластере с Git и либо чинит сам, либо хотя бы сигнализирует о расхождении"
+    ]},
+    { "dot": "amber", "title": "Компромисс", "items": [
+      "Pull обычно означает задержку (интервал polling, например 3 минуты) между коммитом и реальным применением — для мгновенной реакции добавляют webhook, который просто триггерит внеочередной poll"
+    ]}
+  ]
+}

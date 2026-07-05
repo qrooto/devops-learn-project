@@ -781,3 +781,14 @@ curl -s "http://localhost:9090/api/v1/query?query=topk(10,count by (__name__)({_
 # В docker-compose.yml:
 # command: --storage.tsdb.retention.time=7d --storage.tsdb.retention.size=1GB
 ```
+
+---
+
+## Архитектура
+
+- [Концепция: pull-based мониторинг в вакууме](../docs/architecture/level-6-monitoring/concept.html) — почему сервер метрик сам приходит за данными, а не наоборот
+- [Реализация: реальный docker-compose.yml](../docs/architecture/level-6-monitoring/implementation.html) — Prometheus scrape, Grafana, Loki/Promtail
+- [Боль → решение: Level 5 → Level 6](../docs/architecture/level-6-monitoring/pain-solution.html) — от слепоты между инцидентами к видимым трендам
+- [Сеть: антипаттерн этого конфига](../docs/architecture/level-6-monitoring/network.html) — 4 новых published-порта без аутентификации и захардкоженный пароль Grafana
+
+Диаграммы — самодостаточные `.html` файлы (переключатель темы, экспорт в PNG/SVG в браузере). GitHub покажет только исходный код — открывай файл локально в браузере.

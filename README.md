@@ -101,6 +101,14 @@ cd devops-project
 
 Уровень 4a (GitHub Actions) — параллельно с 4b для сравнения двух CI/CD систем.
 
+### Архитектурные диаграммы
+
+[**Мета-схема: вся эволюция системы за 30 секунд**](docs/architecture/00-overview.html) — все 13 уровней как один непрерывный путь от одного сервера до self-healing production-стека.
+
+Для каждого уровня — concept (абстрактная теория) / implementation (реальный конфиг) / pain-solution (было → стало) / network (где есть что показать) диаграммы в `docs/architecture/level-N/`, со ссылками в конце README каждого уровня. Отдельно — [`docs/architecture/networking-theory/`](docs/architecture/networking-theory/) с углублёнными схемами по конкретным сетевым темам (порты и сокеты, TCP-handshake, HTTP, TLS, Docker/Kubernetes сети, webhooks, SSH fan-out) — не привязаны к проекту, пригодятся и за его пределами.
+
+Все диаграммы — самодостаточные `.html` файлы (тема, экспорт в PNG/SVG прямо в браузере); GitHub показывает только код, открывай локально.
+
 ---
 
 ## Боль → Решение (логика прогрессии)

@@ -1,0 +1,201 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 3 — реальный docker-compose",
+    "subtitle": "Общий Redis перед PostgreSQL для всех 3 инстансов backend",
+    "output": "implementation.html"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Браузер",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        120,
+        84
+      ]
+    },
+    {
+      "id": "nginx",
+      "type": "cloud",
+      "label": "nginx",
+      "sublabel": "ports: 80:80",
+      "pos": [
+        250,
+        340
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "b1",
+      "type": "backend",
+      "label": "backend_1",
+      "sublabel": "uvicorn :8000",
+      "pos": [
+        500,
+        140
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "b2",
+      "type": "backend",
+      "label": "backend_2",
+      "sublabel": "uvicorn :8000",
+      "pos": [
+        500,
+        340
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "b3",
+      "type": "backend",
+      "label": "backend_3",
+      "sublabel": "uvicorn :8000",
+      "pos": [
+        500,
+        540
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "redis:7-alpine",
+      "sublabel": ":6379, save 60 1",
+      "tag": "общий кэш для всех 3",
+      "pos": [
+        750,
+        220
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "postgres:16-alpine",
+      "sublabel": ":5432",
+      "pos": [
+        750,
+        460
+      ],
+      "size": [
+        170,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "docker-compose: default bridge network",
+      "wraps": [
+        "nginx",
+        "b1",
+        "b2",
+        "b3",
+        "redis",
+        "postgres"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client",
+      "to": "nginx",
+      "label": "HTTP :80",
+      "variant": "emphasis",
+      "labelDy": -10
+    },
+    {
+      "from": "nginx",
+      "to": "b1",
+      "label": "upstream (round-robin)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "nginx",
+      "to": "b2",
+      "variant": "default"
+    },
+    {
+      "from": "nginx",
+      "to": "b3",
+      "variant": "default"
+    },
+    {
+      "from": "b1",
+      "to": "redis",
+      "variant": "default"
+    },
+    {
+      "from": "b2",
+      "to": "redis",
+      "label": "REDIS_URL redis:6379, TTL 30s",
+      "variant": "emphasis",
+      "labelDy": 23
+    },
+    {
+      "from": "b3",
+      "to": "redis",
+      "variant": "default"
+    },
+    {
+      "from": "b1",
+      "to": "postgres",
+      "variant": "default"
+    },
+    {
+      "from": "b2",
+      "to": "postgres",
+      "label": "DATABASE_URL (только при MISS)",
+      "variant": "dashed",
+      "labelDy": 26
+    },
+    {
+      "from": "b3",
+      "to": "postgres",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "REDIS_URL=redis://redis:6379 общий для всех 3 backend — кэш общий: то, что закэшировал backend_1, увидит и backend_2",
+        "command: redis-server --save 60 1 — снимок на диск каждые 60с при ≥1 изменении; это не защита от полной потери данных, а просто чтобы не терять весь кэш при перезапуске контейнера",
+        "healthcheck redis-cli ping гарантирует, что backend не стартует раньше, чем Redis готов принимать команды — как и с postgres на предыдущих уровнях"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Чего здесь нет",
+      "items": [
+        "У redis нет published-порта — как и у postgres, доступ только изнутри docker-сети",
+        "Нет инвалидации кэша при записи — протухание только по TTL 30 секунд"
+      ]
+    }
+  ]
+}

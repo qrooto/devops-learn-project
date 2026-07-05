@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 2 — сетевой путь запроса",
+    "subtitle": "Балансировка происходит целиком внутри docker-сети, снаружи виден только порт 80",
+    "output": "network.html"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Клиент",
+      "sublabel": "браузер, любой IP",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "ufw",
+      "type": "security",
+      "label": "ufw",
+      "sublabel": "allow 80/tcp (+22 SSH)",
+      "pos": [
+        260,
+        340
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "nginx",
+      "type": "cloud",
+      "label": "nginx",
+      "sublabel": "хост-порт 80 → контейнер 80",
+      "tag": "единственный published порт",
+      "pos": [
+        500,
+        340
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "b1",
+      "type": "backend",
+      "label": "backend_1",
+      "sublabel": "TCP :8000",
+      "tag": "порт НЕ published",
+      "pos": [
+        760,
+        140
+      ],
+      "size": [
+        160,
+        84
+      ]
+    },
+    {
+      "id": "b2",
+      "type": "backend",
+      "label": "backend_2",
+      "sublabel": "TCP :8000",
+      "tag": "порт НЕ published",
+      "pos": [
+        760,
+        340
+      ],
+      "size": [
+        160,
+        84
+      ]
+    },
+    {
+      "id": "b3",
+      "type": "backend",
+      "label": "backend_3",
+      "sublabel": "TCP :8000",
+      "tag": "порт НЕ published",
+      "pos": [
+        760,
+        540
+      ],
+      "size": [
+        160,
+        84
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "postgres",
+      "sublabel": "TCP :5432",
+      "tag": "порт НЕ published",
+      "pos": [
+        1000,
+        340
+      ],
+      "size": [
+        160,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "VPS хост — публичный IP (видно снаружи)",
+      "wraps": [
+        "ufw",
+        "nginx"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "docker network bridge — только внутри хоста",
+      "wraps": [
+        "b1",
+        "b2",
+        "b3",
+        "postgres"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client",
+      "to": "ufw",
+      "label": "TCP :80 (HTTP, без TLS)",
+      "variant": "emphasis",
+      "labelAt": [
+        220,
+        336
+      ]
+    },
+    {
+      "from": "ufw",
+      "to": "nginx",
+      "label": "ALLOW",
+      "variant": "emphasis",
+      "labelDy": -10
+    },
+    {
+      "from": "nginx",
+      "to": "b1",
+      "label": "round-robin, TCP :8000",
+      "variant": "emphasis"
+    },
+    {
+      "from": "nginx",
+      "to": "b2",
+      "variant": "default"
+    },
+    {
+      "from": "nginx",
+      "to": "b3",
+      "variant": "default"
+    },
+    {
+      "from": "b1",
+      "to": "postgres",
+      "variant": "default"
+    },
+    {
+      "from": "b2",
+      "to": "postgres",
+      "label": "TCP :5432 × 3 DNS-имени",
+      "variant": "emphasis",
+      "labelAt": [
+        960,
+        336
+      ]
+    },
+    {
+      "from": "b3",
+      "to": "postgres",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "Все три backend_N по-прежнему без published-порта: ни снаружи VPS, ни с самого хоста напрямую к ним не достучаться — только через nginx",
+        "Балансировка (какой backend_N обслужит запрос) происходит ПОСЛЕ ufw, целиком внутри приватной docker-сети — снаружи этого решения вообще не видно",
+        "postgres тоже без published-порта, но теперь принимает соединения от 3 разных источников одновременно — с точки зрения сети ничего не изменилось снаружи, но нагрузка внутри выросла втрое"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Сегменты сети на этой схеме",
+      "items": [
+        "Публичный сегмент (виден снаружи): только nginx:80",
+        "Приватный сегмент (docker network): 3 backend + postgres — состав вырос, граница видимости снаружи не изменилась"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Теория глубже",
+      "items": [
+        "../networking-theory/05-load-balancing-algorithms.html — round robin vs least connections vs ip hash"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Теория: IP, порт, сокет",
+    "subtitle": "Что на самом деле определяет TCP-соединение — не привязано к проекту",
+    "output": "01-ports-and-sockets.html"
+  },
+  "components": [
+    {
+      "id": "cproc",
+      "type": "backend",
+      "label": "Процесс-клиент",
+      "sublabel": "например curl",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "csock",
+      "type": "security",
+      "label": "Сокет клиента",
+      "sublabel": "192.168.1.5 : 54231",
+      "tag": "порт эфемерный, случайный",
+      "pos": [
+        270,
+        300
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "net",
+      "type": "external",
+      "label": "Сеть",
+      "sublabel": "провод / Wi-Fi / интернет",
+      "pos": [
+        530,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "ssock",
+      "type": "security",
+      "label": "Сокет сервера",
+      "sublabel": "203.0.113.10 : 443",
+      "tag": "порт фиксированный, well-known",
+      "pos": [
+        760,
+        300
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "sproc",
+      "type": "backend",
+      "label": "Процесс-сервер",
+      "sublabel": "например nginx",
+      "pos": [
+        1020,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "cproc",
+      "to": "csock",
+      "variant": "default"
+    },
+    {
+      "from": "csock",
+      "to": "net",
+      "label": "4-tuple: src IP:port → dst IP:port",
+      "variant": "emphasis",
+      "labelAt": [
+        490,
+        296
+      ]
+    },
+    {
+      "from": "net",
+      "to": "ssock",
+      "variant": "default"
+    },
+    {
+      "from": "ssock",
+      "to": "sproc",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "TCP-соединение однозначно определяется четвёркой (src IP, src port, dst IP, dst port) — поэтому один сервер на одном порту обслуживает тысячи клиентов одновременно, у каждого свой src port",
+        "Порт клиента (эфемерный, обычно 32768-60999) ОС выбирает случайно при каждом новом соединении — его никогда не задают руками",
+        "Порт сервера (well-known: 22, 80, 443, 5432...) — фиксированный, именно его открывают в firewall и прописывают в конфигах",
+        "IP отвечает за 'на какую машину', порт — за 'какому процессу на этой машине'"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Порты, с которыми столкнёшься в этом проекте",
+      "items": [
+        "22 SSH, 80 HTTP, 443 HTTPS — публикуются наружу VPS",
+        "5432 PostgreSQL, 6379 Redis, 8000 backend — только внутри docker-сети",
+        "9090 Prometheus, 3000 Grafana, 3100 Loki — внутренние, наружу светить нельзя (Level 6)"
+      ]
+    }
+  ]
+}

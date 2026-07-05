@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Self-hosted CI/CD платформа — концепция",
+    "subtitle": "Код, registry и pipeline — на своей инфраструктуре, не в стороннем SaaS",
+    "output": "concept.html"
+  },
+  "components": [
+    { "id": "dev", "type": "external", "label": "Разработчик", "pos": [40, 300], "size": [140, 84] },
+    { "id": "git", "type": "cloud", "label": "Self-hosted Git-платформа", "sublabel": "репозиторий + registry + CI", "tag": "весь код и артефакты — у тебя", "pos": [280, 300], "size": [220, 84] },
+    { "id": "runner", "type": "backend", "label": "CI Runner", "sublabel": "выполняет pipeline", "pos": [600, 180], "size": [160, 84] },
+    { "id": "registry", "type": "database", "label": "Container Registry", "sublabel": "свои Docker-образы", "pos": [600, 420], "size": [170, 84] },
+    { "id": "infra", "type": "cloud", "label": "Твоя инфраструктура", "sublabel": "деплой", "pos": [860, 300], "size": [170, 84] }
+  ],
+  "connections": [
+    { "from": "dev", "to": "git", "label": "git push", "variant": "emphasis", "labelDy": -46 },
+    { "from": "git", "to": "runner", "label": "триггерит pipeline", "variant": "emphasis", "fromSide": "top", "toSide": "left" },
+    { "from": "git", "to": "registry", "label": "docker push", "variant": "default", "fromSide": "bottom", "toSide": "left" },
+    { "from": "runner", "to": "infra", "label": "деплой (SSH/API)", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "Self-hosted = ты сам отвечаешь за патчи, бэкапы и ресурсы платформы — взамен код и данные физически не покидают твою инфраструктуру",
+      "Runner — это отдельный агент, не сам Git-сервер: он выполняет команды pipeline, можно иметь много runner'ов на разных машинах, включая недоверенные",
+      "Свой Container Registry не требует доверия внешнему ghcr.io/Docker Hub, но требует самому следить за квотами диска"
+    ]},
+    { "dot": "amber", "title": "Компромисс vs SaaS CI/CD", "items": [
+      "SaaS (GitHub Actions и т.п.): быстрый старт, ноль администрирования, но код/секреты проходят через инфраструктуру третьей стороны",
+      "Self-hosted: полный контроль и compliance, но администрирование платформы — уже твоя работа"
+    ]}
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Боль и решение: ручная инфраструктура → IaC",
+    "subtitle": "Было: команды руками, невоспроизводимо → Стало: код, воспроизводимо и версионируемо",
+    "output": "pain-solution.html"
+  },
+  "components": [
+    { "id": "you_b", "type": "external", "label": "Ты", "pos": [40, 140], "size": [110, 84] },
+    { "id": "manual_b", "type": "backend", "label": "docker run, docker network create...", "tag": "невоспроизводимо, никто не помнит порядок", "pos": [260, 140], "size": [250, 84] },
+
+    { "id": "you_a", "type": "external", "label": "Ты", "pos": [40, 420], "size": [110, 84] },
+    { "id": "tf_a", "type": "cloud", "label": "terraform apply", "tag": "то же самое на любой машине", "pos": [260, 420], "size": [190, 84] },
+    { "id": "destroy_a", "type": "security", "label": "terraform destroy", "tag": "разбирает всё до нуля одной командой", "pos": [560, 420], "size": [200, 84] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "ДО", "wraps": ["manual_b"] },
+    { "kind": "region", "label": "ПОСЛЕ — Level 9", "wraps": ["tf_a", "destroy_a"] }
+  ],
+  "connections": [
+    { "from": "you_b", "to": "manual_b", "label": "через месяц никто не помнит параметры", "variant": "security", "labelDy": -46 },
+    { "from": "you_a", "to": "tf_a", "label": "воспроизводимо", "variant": "emphasis", "labelDy": -46 },
+    { "from": "tf_a", "to": "destroy_a", "variant": "default" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Было", "items": [
+      "Инфраструктура создаётся руками командами (docker run, docker network create...) — невоспроизводимо, никто не помнит точный порядок и параметры через месяц"
+    ]},
+    { "dot": "emerald", "title": "Стало", "items": [
+      "Всё описано в .tf файлах: terraform apply создаёт то же самое на любой машине; terraform destroy разбирает всё до нуля одной командой"
+    ]},
+    { "dot": "amber", "title": "Почему это работает", "items": [
+      "State + декларативный код превращают инфраструктуру в код (IaC) — её можно ревьюить в PR и версионировать в Git, как обычный код"
+    ]}
+  ]
+}

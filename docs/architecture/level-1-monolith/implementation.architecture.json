@@ -1,0 +1,170 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 1 — реальный docker-compose",
+    "subtitle": "level-1-monolith/docker-compose.yml: nginx → FastAPI → PostgreSQL",
+    "output": "implementation.html"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Браузер",
+      "sublabel": "пользователь доски объявлений",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "nginx",
+      "type": "cloud",
+      "label": "nginx:alpine",
+      "sublabel": "ports: 80:80",
+      "tag": "контейнер nginx",
+      "pos": [
+        260,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "frontend",
+      "type": "frontend",
+      "label": "./frontend",
+      "sublabel": "volume → /usr/share/nginx/html",
+      "pos": [
+        260,
+        140
+      ],
+      "size": [
+        160,
+        84
+      ]
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "backend (FastAPI)",
+      "sublabel": "uvicorn :8000",
+      "tag": "контейнер backend, build ./backend",
+      "pos": [
+        510,
+        300
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "postgres:16-alpine",
+      "sublabel": ":5432",
+      "tag": "контейнер postgres",
+      "pos": [
+        760,
+        300
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "pgdata",
+      "type": "database",
+      "label": "postgres_data",
+      "sublabel": "named volume",
+      "pos": [
+        760,
+        460
+      ],
+      "size": [
+        150,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "docker-compose: default bridge network",
+      "wraps": [
+        "nginx",
+        "backend",
+        "postgres"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client",
+      "to": "nginx",
+      "label": "HTTP :80",
+      "variant": "emphasis"
+    },
+    {
+      "from": "nginx",
+      "to": "frontend",
+      "label": "root /usr/share/nginx/html",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "nginx",
+      "to": "backend",
+      "label": "location /api/ → proxy_pass",
+      "variant": "emphasis",
+      "labelAt": [
+        460,
+        296
+      ]
+    },
+    {
+      "from": "backend",
+      "to": "postgres",
+      "label": "DATABASE_URL :5432",
+      "variant": "emphasis",
+      "labelAt": [
+        720,
+        296
+      ]
+    },
+    {
+      "from": "postgres",
+      "to": "pgdata",
+      "label": "хранение данных",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "nginx.conf: location /api/ проксирует на backend:8000 по внутреннему DNS-имени сервиса docker-compose, а не по localhost и не по IP-адресу",
+        "Порт 80 — единственный, опубликованный наружу (ports: \"80:80\"); backend:8000 и postgres:5432 доступны только внутри docker-сети, снаружи VPS их не видно",
+        "depends_on + healthcheck (pg_isready) гарантирует, что backend стартует только когда postgres реально готов принимать соединения — а не просто когда контейнер запущен"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Что здесь узкое место",
+      "items": [
+        "Один контейнер backend = один процесс uvicorn = ограниченное число одновременных запросов",
+        "Это то самое место, которое сломает нагрузочный тест и приведёт к Level 2"
+      ]
+    }
+  ]
+}

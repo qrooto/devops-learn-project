@@ -392,3 +392,17 @@ git add level-6.5-ai-agent/
 git commit -m "level-6.5: ai diagnostic agent with claude api and telegram approve/reject"
 git push origin main
 ```
+
+---
+
+## Архитектура
+
+- [Концепция: LLM-in-the-loop агент в вакууме](../docs/architecture/level-6.5-ai-agent/concept.html) — LLM объясняет и предлагает, человек решает
+- [Реализация: реальный поток обработки алерта](../docs/architecture/level-6.5-ai-agent/implementation.html) — sequence-диаграмма webhook → Prometheus/Loki → Claude → Telegram → Docker API
+- [Боль → решение: Level 6 → Level 6.5](../docs/architecture/level-6.5-ai-agent/pain-solution.html) — от ручной интерпретации алертов к готовому диагнозу
+- [Сеть: webhook внутрь, API наружу](../docs/architecture/level-6.5-ai-agent/network.html) — ingress от Alertmanager + egress к Claude/Telegram в одном сервисе
+
+**Теория сетей глубже:**
+- [Webhook (ingress) vs вызов API (egress)](../docs/architecture/networking-theory/08-webhooks-and-egress.html) — почему это разные направления трафика с разными требованиями к firewall
+
+Диаграммы — самодостаточные `.html` файлы (переключатель темы, экспорт в PNG/SVG в браузере). GitHub покажет только исходный код — открывай файл локально в браузере.

@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "VPS Hardening — концепция",
+    "subtitle": "Default Deny + ключи вместо паролей (не привязано к конкретному проекту)",
+    "output": "concept.html"
+  },
+  "components": [
+    {
+      "id": "attacker",
+      "type": "external",
+      "label": "Боты / атакующий",
+      "sublabel": "сканируют весь интернет",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "firewall",
+      "type": "security",
+      "label": "Firewall",
+      "sublabel": "ufw: default deny",
+      "tag": "разрешено: 22,80,443",
+      "pos": [
+        260,
+        300
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "sshd",
+      "type": "security",
+      "label": "SSH daemon",
+      "sublabel": "порт 22, только ключи",
+      "pos": [
+        480,
+        300
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "fail2ban",
+      "type": "security",
+      "label": "fail2ban",
+      "sublabel": "следит за auth.log",
+      "pos": [
+        480,
+        120
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "user",
+      "type": "backend",
+      "label": "Обычный юзер",
+      "sublabel": "sudo по требованию",
+      "pos": [
+        700,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "system",
+      "type": "cloud",
+      "label": "Система / root-права",
+      "sublabel": "файлы, процессы, пакеты",
+      "pos": [
+        910,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "Периметр VPS — default deny",
+      "wraps": [
+        "firewall",
+        "sshd",
+        "fail2ban"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "attacker",
+      "to": "firewall",
+      "label": "запросы на все порты",
+      "variant": "dashed",
+      "labelAt": [
+        220,
+        296
+      ]
+    },
+    {
+      "from": "firewall",
+      "to": "sshd",
+      "label": "22/tcp пропущен",
+      "variant": "emphasis"
+    },
+    {
+      "from": "sshd",
+      "to": "fail2ban",
+      "label": "неудачные попытки",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "fail2ban",
+      "to": "firewall",
+      "label": "бан IP",
+      "variant": "security",
+      "fromSide": "left",
+      "toSide": "top"
+    },
+    {
+      "from": "sshd",
+      "to": "user",
+      "label": "вход по ключу",
+      "variant": "emphasis"
+    },
+    {
+      "from": "user",
+      "to": "system",
+      "label": "sudo <команда>",
+      "variant": "security",
+      "labelAt": [
+        880,
+        296
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "Default deny = разрешено явно перечисленное, всё остальное падает молча — новый сервис не заработает, пока сам не откроешь порт",
+        "SSH-ключ — это единственная дверь: потерял приватный ключ и нет пароля root — потерял сервер",
+        "sudo — это осознанный шаг каждый раз, а не постоянный режим работы",
+        "fail2ban реагирует постфактум — это фильтр шума ботов, а не защита от целевой атаки"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Периметр",
+      "items": [
+        "Всё внутри пунктирной рамки — обязательный минимум на любом новом сервере",
+        "Разрешённые порты — осознанный список, не 'что само открылось'"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Теория: webhook (ingress) vs вызов API (egress)",
+    "subtitle": "Два разных направления трафика, два разных требования к firewall",
+    "output": "08-webhooks-and-egress.html"
+  },
+  "components": [
+    { "id": "external_service", "type": "external", "label": "Внешний сервис", "sublabel": "например Alertmanager, GitHub", "tag": "инициирует запрос", "pos": [40, 300], "size": [190, 84] },
+    { "id": "endpoint", "type": "security", "label": "Твой webhook endpoint", "sublabel": "публичный URL", "tag": "сам себя защищает (secret/подпись)", "pos": [320, 300], "size": [220, 84] },
+    { "id": "app", "type": "backend", "label": "Твоё приложение", "sublabel": "обрабатывает событие", "pos": [630, 300], "size": [180, 84] },
+    { "id": "external_api", "type": "external", "label": "Внешний API", "sublabel": "например Claude, Telegram", "tag": "твоё приложение — инициатор", "pos": [900, 300], "size": [190, 84] }
+  ],
+  "connections": [
+    { "from": "external_service", "to": "endpoint", "label": "POST (inbound webhook)", "variant": "emphasis", "labelDy": -46 },
+    { "from": "endpoint", "to": "app", "variant": "default" },
+    { "from": "app", "to": "external_api", "label": "исходящий запрос (egress)", "variant": "dashed", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "Webhook — это HTTP-эндпоинт, который ты публикуешь, чтобы ДРУГОЙ сервис мог сам к тебе постучаться; это единственный тип интеграции, требующий INGRESS (входящий трафик), а не egress",
+      "Ingress по умолчанию заблокирован firewall'ом (default deny), egress обычно разрешён почти весь — поэтому приложение свободно звонит наружу (Claude, Telegram), а чтобы кто-то мог позвонить ТЕБЕ (webhook) — нужно явно открывать порт",
+      "Публичный webhook endpoint без проверки подписи/секрета — уязвимость: любой, кто узнает URL, может отправить поддельное событие. Проверяй HMAC-подпись или secret-токен в заголовке"
+    ]},
+    { "dot": "amber", "title": "Где это в проекте", "items": [
+      "Level 6.5 — agent:8080/webhook принимает POST от Alertmanager (ingress), но сам же вызывает Claude API и Telegram API (egress) — оба направления присутствуют в одном сервисе"
+    ]}
+  ]
+}

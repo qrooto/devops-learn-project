@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Infrastructure as Code — концепция",
+    "subtitle": "Цикл plan → apply → state, не привязано к проекту",
+    "output": "concept.html"
+  },
+  "components": [
+    { "id": "code", "type": "frontend", "label": "Код (.tf файлы)", "sublabel": "желаемое состояние", "pos": [40, 300], "size": [180, 84] },
+    { "id": "plan", "type": "backend", "label": "terraform plan", "tag": "показывает diff, НЕ применяет", "pos": [300, 300], "size": [190, 84] },
+    { "id": "state", "type": "database", "label": "State файл", "sublabel": "текущее состояние ресурсов", "tag": "содержит секреты — не коммитить!", "pos": [300, 120], "size": [210, 84] },
+    { "id": "apply", "type": "backend", "label": "terraform apply", "tag": "применяет изменения", "pos": [570, 300], "size": [190, 84] },
+    { "id": "infra", "type": "cloud", "label": "Реальная инфраструктура", "pos": [850, 300], "size": [200, 84] }
+  ],
+  "connections": [
+    { "from": "code", "to": "plan", "label": "сравнение с state", "variant": "emphasis", "labelDy": -46 },
+    { "from": "state", "to": "plan", "label": "текущее состояние", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+    { "from": "plan", "to": "apply", "label": "подтверждение", "variant": "emphasis", "labelDy": -46 },
+    { "from": "apply", "to": "infra", "label": "создаёт / меняет / удаляет", "variant": "emphasis", "labelDy": -46 },
+    { "from": "apply", "to": "state", "label": "обновляет state", "variant": "dashed", "fromSide": "top", "toSide": "bottom" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "State — самое важное понятие: файл с информацией о всех созданных ресурсах. Без него Terraform не знает, что уже существует, и попытается создать всё заново",
+      "State нельзя коммитить в Git — там могут быть чувствительные данные (пароли, ключи) в открытом виде; в команде state хранят в S3/GCS/Terraform Cloud с блокировкой (lock), чтобы два человека не применяли изменения одновременно",
+      "terraform plan — это dry-run: показывает ЧТО изменится, ничего не трогая. Смотри план перед apply всегда, особенно в проде"
+    ]},
+    { "dot": "amber", "title": "Жизненный цикл ресурса", "items": [
+      "Terraform управляет полным циклом: создал → изменил → удалил (terraform destroy) — не только созданием, в отличие от Ansible"
+    ]}
+  ]
+}

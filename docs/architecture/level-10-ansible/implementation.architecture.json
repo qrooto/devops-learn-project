@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 10 — реальный site.yml",
+    "subtitle": "Роли по порядку: common → docker → tools → app (условно)",
+    "output": "implementation.html"
+  },
+  "components": [
+    { "id": "inventory", "type": "database", "label": "hosts.ini", "sublabel": "[local] + [webservers]", "tag": "connection=local для localhost", "pos": [40, 300], "size": [190, 84] },
+    { "id": "site", "type": "frontend", "label": "site.yml", "sublabel": "hosts: all, become: true", "pos": [300, 300], "size": [190, 84] },
+    { "id": "roles", "type": "backend", "label": "common → docker → tools → app", "tag": "app только если deploy_app=true", "pos": [560, 300], "size": [230, 84] },
+    { "id": "localhost", "type": "backend", "label": "localhost", "sublabel": "ansible_connection=local", "pos": [860, 140], "size": [180, 84] },
+    { "id": "remote", "type": "backend", "label": "devops-vm-N", "sublabel": "по SSH (пока закомментировано)", "pos": [860, 460], "size": [190, 84] }
+  ],
+  "connections": [
+    { "from": "inventory", "to": "site", "label": "-i inventory/hosts.ini", "variant": "emphasis", "labelDy": -46 },
+    { "from": "site", "to": "roles", "label": "тегированные роли по порядку", "variant": "emphasis", "labelDy": -46 },
+    { "from": "roles", "to": "localhost", "label": "без сети", "variant": "default", "fromSide": "top", "toSide": "left" },
+    { "from": "roles", "to": "remote", "label": "SSH", "variant": "dashed", "fromSide": "bottom", "toSide": "left" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "Роли выполняются строго по порядку из списка в site.yml: common → docker → tools → app — docker должен быть установлен ДО роли app, которая делает docker compose up",
+      "when: deploy_app | default(false) | bool — роль app пропускается по умолчанию; её включают явно флагом -e deploy_app=true, чтобы не деплоить приложение при каждой обычной настройке сервера",
+      "[webservers] в hosts.ini закомментирован — по умолчанию Ansible управляет только localhost (connection=local, без SSH вообще); реальный multi-server сценарий требует раскомментировать и указать IP"
+    ]},
+    { "dot": "amber", "title": "Теги для выборочного запуска", "items": [
+      "ansible-playbook playbooks/site.yml --tags docker — прогонит только роль docker, не трогая остальные"
+    ]}
+  ]
+}

@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Горизонтальное масштабирование — концепция",
+    "subtitle": "Load balancer + N одинаковых stateless-воркеров + общее хранилище состояния",
+    "output": "concept.html"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Клиент",
+      "sublabel": "браузер",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        130,
+        84
+      ]
+    },
+    {
+      "id": "lb",
+      "type": "cloud",
+      "label": "Load Balancer",
+      "sublabel": "round-robin",
+      "pos": [
+        260,
+        340
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "worker1",
+      "type": "backend",
+      "label": "Инстанс 1",
+      "sublabel": "stateless",
+      "pos": [
+        520,
+        140
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "worker2",
+      "type": "backend",
+      "label": "Инстанс 2",
+      "sublabel": "stateless",
+      "pos": [
+        520,
+        340
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "worker3",
+      "type": "backend",
+      "label": "Инстанс 3",
+      "sublabel": "stateless",
+      "pos": [
+        520,
+        540
+      ],
+      "size": [
+        140,
+        84
+      ]
+    },
+    {
+      "id": "shared",
+      "type": "database",
+      "label": "Общее хранилище",
+      "sublabel": "сессии, данные",
+      "tag": "новый потолок производительности",
+      "pos": [
+        760,
+        340
+      ],
+      "size": [
+        160,
+        84
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "client",
+      "to": "lb",
+      "label": "HTTP",
+      "variant": "emphasis",
+      "labelDy": -10
+    },
+    {
+      "from": "lb",
+      "to": "worker1",
+      "label": "round-robin",
+      "variant": "emphasis"
+    },
+    {
+      "from": "lb",
+      "to": "worker2",
+      "variant": "default"
+    },
+    {
+      "from": "lb",
+      "to": "worker3",
+      "variant": "default"
+    },
+    {
+      "from": "worker1",
+      "to": "shared",
+      "variant": "default"
+    },
+    {
+      "from": "worker2",
+      "to": "shared",
+      "label": "общее состояние",
+      "variant": "emphasis",
+      "labelDy": -10
+    },
+    {
+      "from": "worker3",
+      "to": "shared",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "Каждый инстанс обязан быть stateless: если сессия или файл сохраняются в памяти одного процесса, round-robin размажет следующий запрос того же пользователя по другому инстансу — и там этих данных не будет",
+        "LB не знает, какой инстанс 'быстрее' сейчас — round-robin просто чередует по очереди, независимо от реальной нагрузки на каждый инстанс",
+        "N инстансов бьют в ОДНО общее хранилище — оно становится новым потолком производительности, даже если инстансов бесконечно много"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Что нужно проверить перед масштабированием",
+      "items": [
+        "Не хранит ли код что-либо в локальной памяти процесса (in-memory cache, session dict)",
+        "Идемпотентны ли операции — повторный запрос на другой инстанс не должен ломать данные"
+      ]
+    }
+  ]
+}

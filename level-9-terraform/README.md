@@ -657,3 +657,15 @@ docker run --rm --network host \
 # Из вывода берём "ID" и передаём в force-unlock:
 terraform force-unlock <ID>
 ```
+
+---
+
+## Архитектура
+
+- [Концепция: Infrastructure as Code в вакууме](../docs/architecture/level-9-terraform/concept.html) — цикл plan → apply → state
+- [Реализация: реальный main.tf](../docs/architecture/level-9-terraform/implementation.html) — provider docker управляет локальными контейнерами
+- [Боль → решение: ручная инфраструктура → IaC](../docs/architecture/level-9-terraform/pain-solution.html) — от невоспроизводимых команд к версионируемому коду
+
+Сетевой схемы для этого уровня нет: Terraform — инструмент tooling-слоя, он не меняет сетевую топологию приложения, только способ её создания (см. сетевые схемы Level 1-3, которые описывают ту же инфраструктуру).
+
+Диаграммы — самодостаточные `.html` файлы (переключатель темы, экспорт в PNG/SVG в браузере). GitHub покажет только исходный код — открывай файл локально в браузере.

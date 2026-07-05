@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 8 — реальный ArgoCD Application",
+    "subtitle": "Git остаётся единственным источником правды о состоянии кластера",
+    "output": "implementation.html"
+  },
+  "components": [
+    { "id": "dev", "type": "external", "label": "Разработчик", "pos": [40, 300], "size": [140, 84] },
+    { "id": "git", "type": "database", "label": "GitHub/GitLab repo", "sublabel": "level-5-kubernetes/k8s", "pos": [280, 300], "size": [200, 84] },
+    { "id": "argocd", "type": "security", "label": "ArgoCD", "sublabel": "namespace: argocd", "tag": "polling каждые 3 мин или webhook", "pos": [580, 300], "size": [200, 84] },
+    { "id": "cluster", "type": "cloud", "label": "Kubernetes cluster", "sublabel": "namespace: bulletin-board", "pos": [870, 300], "size": [200, 84] }
+  ],
+  "connections": [
+    { "from": "dev", "to": "git", "label": "git push", "variant": "emphasis", "labelDy": -46 },
+    { "from": "argocd", "to": "git", "label": "poll / webhook", "variant": "emphasis", "fromSide": "left", "toSide": "right" },
+    { "from": "argocd", "to": "cluster", "label": "prune: true, selfHeal: true", "variant": "emphasis", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "syncPolicy.automated.selfHeal: true — если кто-то поменяет ресурс вручную (kubectl edit), ArgoCD откатит это обратно к состоянию из Git при следующей синхронизации",
+      "prune: true — ресурсы, удалённые из Git, будут удалены и из кластера; без этого флага удаление манифеста из репо ничего не удаляет в кластере",
+      "destination.server: https://kubernetes.default.svc — ArgoCD работает ВНУТРИ того же кластера, куда деплоит; никакого внешнего API-доступа с credentials наружу не требуется"
+    ]},
+    { "dot": "amber", "title": "Чего здесь нет", "items": [
+      "CI больше не имеет прямого доступа к кластеру — его роль ограничена сборкой образа и коммитом обновлённого тега в Git"
+    ]}
+  ]
+}

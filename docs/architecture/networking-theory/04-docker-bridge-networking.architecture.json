@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Теория: docker bridge-сеть изнутри",
+    "subtitle": "Что реально происходит за 'ports: 80:80' и DATABASE_URL=...@postgres:5432",
+    "output": "04-docker-bridge-networking.html"
+  },
+  "components": [
+    {
+      "id": "hosteth",
+      "type": "cloud",
+      "label": "eth0 (хост)",
+      "sublabel": "публичный IP",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        150,
+        84
+      ]
+    },
+    {
+      "id": "iptables",
+      "type": "security",
+      "label": "iptables DNAT",
+      "sublabel": "PREROUTING: :80 → 172.17.0.2:80",
+      "tag": "результат ports: \"80:80\"",
+      "pos": [
+        280,
+        300
+      ],
+      "size": [
+        190,
+        84
+      ]
+    },
+    {
+      "id": "bridge",
+      "type": "cloud",
+      "label": "docker0 / bridge",
+      "sublabel": "172.17.0.0/16",
+      "pos": [
+        560,
+        300
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "dns",
+      "type": "security",
+      "label": "Embedded DNS",
+      "sublabel": "127.0.0.11 : 53",
+      "tag": "резолвит имена сервисов",
+      "pos": [
+        560,
+        140
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "cnginx",
+      "type": "backend",
+      "label": "контейнер nginx",
+      "sublabel": "172.17.0.2",
+      "pos": [
+        820,
+        300
+      ],
+      "size": [
+        170,
+        84
+      ]
+    },
+    {
+      "id": "cbackend",
+      "type": "backend",
+      "label": "контейнер backend",
+      "sublabel": "172.17.0.3, БЕЗ ports:",
+      "pos": [
+        1060,
+        300
+      ],
+      "size": [
+        180,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "docker bridge network (172.17.0.0/16)",
+      "wraps": [
+        "bridge",
+        "dns",
+        "cnginx",
+        "cbackend"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "hosteth",
+      "to": "iptables",
+      "label": "входящий :80",
+      "variant": "emphasis",
+      "labelDy": -10
+    },
+    {
+      "from": "iptables",
+      "to": "bridge",
+      "label": "DNAT → 172.17.0.2:80",
+      "variant": "emphasis",
+      "labelAt": [
+        515,
+        296
+      ]
+    },
+    {
+      "from": "bridge",
+      "to": "cnginx",
+      "variant": "default"
+    },
+    {
+      "from": "cnginx",
+      "to": "dns",
+      "label": "резолв имени 'backend'",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "cnginx",
+      "to": "cbackend",
+      "label": "TCP :8000 по DNS-имени",
+      "variant": "emphasis",
+      "labelAt": [
+        1025,
+        296
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "🧠 Держи в голове",
+      "items": [
+        "ports: \"80:80\" в docker-compose = ты просишь Docker создать правило iptables DNAT: входящий трафик хоста перенаправляется на внутренний IP контейнера — без этой строки порт физически недостижим снаружи, даже с самого хоста",
+        "У каждого контейнера свой IP в подсети bridge-сети (обычно 172.17.0.0/16) — эти IP не видны снаружи и не используются в конфигах напрямую",
+        "Имена сервисов (backend, postgres, redis) резолвятся через встроенный DNS-сервер Docker на 127.0.0.11 — поэтому в connection string пишут postgresql://...@postgres:5432, а не IP-адрес"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Где это уже встречалось",
+      "items": [
+        "Это то, что происходит 'под капотом' у каждого DATABASE_URL=...@postgres:5432 и REDIS_URL=redis://redis:6379 из Level 1-3"
+      ]
+    }
+  ]
+}

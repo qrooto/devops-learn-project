@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "TLS termination — концепция",
+    "subtitle": "Где именно расшифровывается трафик и что происходит дальше",
+    "output": "concept.html"
+  },
+  "components": [
+    { "id": "client", "type": "external", "label": "Клиент", "sublabel": "браузер", "pos": [40, 300], "size": [140, 84] },
+    { "id": "proxy", "type": "cloud", "label": "TLS-proxy", "sublabel": "терминирует TLS", "tag": "расшифровывает здесь", "pos": [280, 300], "size": [170, 84] },
+    { "id": "ca", "type": "external", "label": "Certificate Authority", "sublabel": "например Let's Encrypt", "pos": [280, 120], "size": [190, 84] },
+    { "id": "backend", "type": "backend", "label": "Backend", "sublabel": "видит только plaintext", "pos": [550, 300], "size": [160, 84] }
+  ],
+  "connections": [
+    { "from": "client", "to": "proxy", "label": "HTTPS (зашифровано)", "variant": "emphasis", "labelDy": -46 },
+    { "from": "ca", "to": "proxy", "label": "выдаёт сертификат (ACME)", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelDy": 24 },
+    { "from": "proxy", "to": "backend", "label": "HTTP (plaintext, доверенная сеть)", "variant": "default", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "TLS termination = расшифровка происходит НА proxy; дальше внутри доверенной сети трафик обычно идёт открытым текстом — это нормально, если эта сеть изолирована (как docker-сеть)",
+      "Сертификат подтверждает 'ты правда example.com', а не 'этот сервер безопасен' — TLS шифрует канал, а не код на сервере",
+      "ACME (протокол Let's Encrypt) — автоматизированная выдача: CA присылает challenge, сервер доказывает владение доменом, получает сертификат на ограниченный срок (обычно 90 дней)"
+    ]},
+    { "dot": "amber", "title": "Альтернативы termination", "items": [
+      "TLS passthrough — proxy не расшифровывает, просто пробрасывает TCP-поток; сложнее делать L7-роутинг по пути или домену",
+      "TLS re-encryption — proxy расшифровывает и шифрует заново перед backend; нужно в zero-trust сетях, где доверенных сегментов вообще нет"
+    ]}
+  ]
+}

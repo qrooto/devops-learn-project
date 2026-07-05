@@ -771,3 +771,15 @@ ORDER BY a.created_at DESC LIMIT 20;"
 docker compose exec postgres psql -U postgres -d bulletin_board -c "
 SELECT relname, idx_scan, seq_scan FROM pg_stat_user_tables ORDER BY seq_scan DESC;"
 ```
+
+---
+
+## Архитектура
+
+- [Концепция: cache-aside в вакууме](../docs/architecture/level-3-caching/concept.html) — когда приложение читает из кэша, когда из БД, и почему это компромисс, а не бесплатный ускоритель
+- [Реализация: реальный docker-compose.yml](../docs/architecture/level-3-caching/implementation.html) — общий redis:7-alpine для всех 3 backend, TTL 30s
+- [Боль → решение: Level 2 → Level 3](../docs/architecture/level-3-caching/pain-solution.html) — было/стало/почему это работает и какой ценой
+
+Сетевой диаграммы для этого уровня нет: у Redis нет published-порта, набор портов, видимых снаружи VPS, не изменился с Level 2 (см. [network Level 2](../docs/architecture/level-2-scaling/network.html)).
+
+Диаграммы — самодостаточные `.html` файлы (переключатель темы, экспорт в PNG/SVG в браузере). GitHub покажет только исходный код — открывай файл локально в браузере.

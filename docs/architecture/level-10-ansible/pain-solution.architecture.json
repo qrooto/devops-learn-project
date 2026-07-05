@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Боль и решение: ручная настройка N серверов → Ansible",
+    "subtitle": "Было: часы ручной работы и опечатки → Стало: один playbook, идентичный результат везде",
+    "output": "pain-solution.html"
+  },
+  "components": [
+    { "id": "you_b", "type": "external", "label": "Ты", "pos": [40, 140], "size": [110, 84] },
+    { "id": "servers_b", "type": "backend", "label": "10-50 серверов вручную", "tag": "часы работы, один опечатался — настроен иначе", "pos": [260, 140], "size": [230, 84] },
+
+    { "id": "you_a", "type": "external", "label": "Ты", "pos": [40, 420], "size": [110, 84] },
+    { "id": "playbook_a", "type": "cloud", "label": "ansible-playbook site.yml", "tag": "параллельно (forks), результат идентичен", "pos": [260, 420], "size": [230, 84] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "ДО", "wraps": ["servers_b"] },
+    { "kind": "region", "label": "ПОСЛЕ — Level 10", "wraps": ["playbook_a"] }
+  ],
+  "connections": [
+    { "from": "you_b", "to": "servers_b", "label": "медленно, неповторяемо", "variant": "security", "labelDy": -46 },
+    { "from": "you_a", "to": "playbook_a", "label": "быстро, воспроизводимо", "variant": "emphasis", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Было", "items": [
+      "Настройка одного сервера вручную — полчаса; настройка 10 или 50 — часы, легко ошибиться, один сервер настроен иначе остальных"
+    ]},
+    { "dot": "emerald", "title": "Стало", "items": [
+      "Один и тот же playbook применяется параллельно (forks) к любому числу хостов из инвентаря — результат идентичен на всех"
+    ]},
+    { "dot": "amber", "title": "Почему это работает", "items": [
+      "Идемпотентность + декларативность: описываешь ЧТО должно быть, Ansible сам разбирается КАК этого достичь на конкретной ОС"
+    ]}
+  ]
+}

@@ -22,47 +22,51 @@
 
 ## Архитектура
 
+Агент живёт **не на VPS**, а на локальной рабочей машине. Даже квантованная LLM требует 4-8 ГБ RAM только под саму модель — раздувать под это тариф VPS ради процесса, который вызывается раз в несколько минут, не имеет смысла. Локальная машина тянет это без апгрейда сервера, а до Prometheus/Loki на VPS агент достаёт по сети через приватный туннель (см. Шаг 4).
+
 ```
-Alertmanager
-    │
-    │ POST /webhook  (при срабатывании алерта)
-    ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    AI Diagnostic Agent                      │
-│                                                             │
-│  main.py                                                    │
-│  ├── parse alert (alertname, labels, severity)              │
-│  │                                                          │
-│  ├── diagnostics.py ──────────────────────────────────────→ Prometheus API
-│  │   collect_context()    ──────────────────────────────→   Loki API
-│  │   {metrics, logs}                                        │
-│  │                                                          │
-│  ├── llm.py                                                 │
-│  │   diagnose(alert, context) ──────────────────────────→  Claude API
-│  │   → Diagnosis{summary, root_cause, action, confidence}  │
-│  │                                                          │
-│  └── telegram_bot.py                                        │
-│      send_diagnosis() ──────────────────────────────────→  Telegram
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-                                    │
-                         Оператор видит сообщение:
-                         "Error rate 12%. Причина: OOM-killed.
-                          Действие: restart backend_2
-                          [✅ Approve] [❌ Reject]"
-                                    │
-                         ┌──────────┴──────────┐
-                    Approve                  Reject
-                         │
-                    actions.py
-                    docker.restart("backend_2")
-                         │
-                    Отчёт в Telegram:
-                    "✅ backend_2 перезапущен"
+┌───────────────────────── VPS ──────────────────────────┐
+│                                                         │
+│  Alertmanager ──POST /webhook──┐                        │
+│  Prometheus :9090  (ufw: закрыт для интернета)  │       │
+│  Loki :3100         (ufw: закрыт для интернета) │       │
+│                                  │               │       │
+└──────────────────────────────┼──┼───────────────┼───────┘
+                                 │  │               │
+                    WireGuard-туннель (или SSH fallback)
+                                 │  │               │
+┌────────────────── Локальная машина ──┼───────────┼───────┐
+│                                ▼      ▼           ▼        │
+│  ┌────────────────────────────────────────────────────┐   │
+│  │              AI Diagnostic Agent                    │   │
+│  │  main.py                                            │   │
+│  │  ├── diagnostics.py ──────→ Prometheus API (туннель)│   │
+│  │  │   collect_context()  ──→ Loki API (туннель)      │   │
+│  │  ├── llm.py                                         │   │
+│  │  │   diagnose() ──────────────────────→ Claude API   │   │
+│  │  └── telegram_bot.py                                │   │
+│  │      send_diagnosis() ────────────────→ Telegram API │   │
+│  └────────────────────────────────────────────────────┘   │
+│                         │                                  │
+│              Оператор видит в Telegram:                    │
+│              "Error rate 12%. Причина: OOM-killed.         │
+│               Действие: restart backend_2                  │
+│               [✅ Approve] [❌ Reject]"                     │
+│                         │                                  │
+│                    Approve → actions.py                    │
+│                    DOCKER_HOST=ssh://user@vps-ip            │
+│                    docker.restart("backend_2") ─────────────┼──→ SSH на VPS
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
 ```
 
+**Что изменилось по сравнению с наивной схемой "всё на VPS":**
+- Агент, вызовы Claude и Telegram-бот — на локальной машине, не в docker-compose VPS
+- Prometheus и Loki остаются на VPS, но их порты закрыты для интернета — агент достаёт до них только через туннель (Шаг 4)
+- Restart-действия идут не через локальный `docker.sock`, а через `DOCKER_HOST=ssh://user@vps-ip` — тот же Docker API агента, но транспортом служит SSH до VPS вместо локального сокета
+
 **Что агент НЕ делает:**
-- Не имеет SSH-доступа к серверам
+- Не имеет интерактивного shell-доступа к серверам — DOCKER_HOST=ssh — это транспорт для того же ограниченного Docker API, не произвольные команды
 - Не удаляет данные и не останавливает БД/мониторинг
 - Не выполняет действия без Approve оператора
 - Не хранит логи и метрики — только читает API
@@ -71,7 +75,8 @@ Alertmanager
 
 ## Предварительные требования
 
-- Запущен стек из уровня 6 (`level-6-monitoring/`)
+- Запущен стек из уровня 6 (`level-6-monitoring/`) на VPS
+- Локальная машина для агента: Docker, доступ в интернет, SSH-доступ к VPS
 - Есть аккаунт в Anthropic Console (claude API)
 - Есть Telegram-аккаунт
 
@@ -131,32 +136,110 @@ nano .env
 CLAUDE_API_KEY=sk-ant-api03-...
 TELEGRAM_BOT_TOKEN=123456789:ABC...
 TELEGRAM_CHAT_ID=-100123456789
-PROMETHEUS_URL=http://prometheus:9090
-LOKI_URL=http://loki:3100
+# 10.8.0.1 — адрес VPS ВНУТРИ WireGuard-туннеля (Шаг 4), не публичный IP.
+# Без туннеля эти URL недостижимы — порты 9090/3100 закрыты для интернета.
+PROMETHEUS_URL=http://10.8.0.1:9090
+LOKI_URL=http://10.8.0.1:3100
 ```
 
-**Проверь что level-6 стек запущен:**
+**Проверь что level-6 стек запущен (на VPS, по SSH):**
 ```bash
-docker compose -f ../level-6-monitoring/docker-compose.yml ps
+ssh user@vps-ip "docker compose -f ~/devops-project/level-6-monitoring/docker-compose.yml ps"
 # prometheus, grafana, loki, backend_1/2/3 должны быть Up
 ```
 
 ---
 
-## Шаг 4 — Подключить агента к сети мониторинга
+## Шаг 4 — Закрыть Prometheus/Loki от интернета и открыть туннель для агента
 
-Агент должен достучаться до Prometheus и Loki. Они в сети `level-6-monitoring_default`.
+Агент теперь не в одной docker-сети с мониторингом (она осталась только на VPS) — ему нужен собственный сетевой путь до Prometheus и Loki. Заодно закрываем то, что и так не должно было быть открыто наружу с Level 6.
+
+### 4.1 — ufw: закрыть 9090 и 3100 для интернета (на VPS)
 
 ```bash
-# Проверь имя сети:
-docker network ls | grep monitoring
-# level-6-monitoring_default
+# Если раньше открывал явно — удали общий allow:
+sudo ufw delete allow 9090/tcp
+sudo ufw delete allow 3100/tcp
 
-# Если имя отличается — обнови в docker-compose.yml:
-# networks:
-#   monitoring_net:
-#     name: <ТВОЁ_ИМЯ_СЕТИ>
+# Разрешаем эти порты ТОЛЬКО из подсети туннеля (настроим её ниже, 10.8.0.0/24):
+sudo ufw allow from 10.8.0.0/24 to any port 9090 proto tcp
+sudo ufw allow from 10.8.0.0/24 to any port 3100 proto tcp
+sudo ufw status numbered
 ```
+
+### 4.2 — WireGuard-туннель (основной вариант)
+
+**На VPS:**
+```bash
+sudo apt install -y wireguard
+wg genkey | sudo tee /etc/wireguard/privatekey | wg pubkey | sudo tee /etc/wireguard/publickey
+sudo chmod 600 /etc/wireguard/privatekey
+
+sudo nano /etc/wireguard/wg0.conf
+```
+```ini
+[Interface]
+Address = 10.8.0.1/24
+PrivateKey = <содержимое /etc/wireguard/privatekey>
+ListenPort = 51820
+
+[Peer]
+PublicKey = <публичный ключ локальной машины — получишь на следующем шаге>
+AllowedIPs = 10.8.0.2/32
+```
+```bash
+sudo ufw allow 51820/udp
+sudo wg-quick up wg0
+sudo systemctl enable wg-quick@wg0
+```
+
+**На локальной машине:**
+```bash
+wg genkey | tee privatekey | wg pubkey > publickey
+
+sudo nano /etc/wireguard/wg0.conf
+```
+```ini
+[Interface]
+Address = 10.8.0.2/24
+PrivateKey = <содержимое privatekey>
+
+[Peer]
+PublicKey = <публичный ключ VPS>
+Endpoint = <публичный IP VPS>:51820
+AllowedIPs = 10.8.0.1/32
+PersistentKeepalive = 25
+```
+```bash
+sudo wg-quick up wg0
+
+# Проверка туннеля в обе стороны:
+ping 10.8.0.1                              # с локальной машины до VPS
+curl http://10.8.0.1:9090/-/healthy        # Prometheus через туннель
+curl http://10.8.0.1:3100/ready            # Loki через туннель
+```
+
+WireGuard — полноценная приватная сеть, а не однонаправленный проброс: VPS видит локальную машину по 10.8.0.2 так же, как локальная машина видит VPS по 10.8.0.1. Это важно для Шага 5 — Alertmanager должен достучаться до вебхука агента в ОБРАТНОМ направлении (VPS → локальная машина).
+
+### 4.3 — SSH-туннель (временный/учебный fallback)
+
+Обычный SSH-проброс однонаправленный, поэтому нужны оба варианта сразу:
+
+```bash
+# Локальная машина → VPS: доступ агента к Prometheus/Loki (pull)
+ssh -N -L 9090:localhost:9090 -L 3100:localhost:3100 user@vps-ip &
+
+# VPS → локальная машина: Alertmanager стучится в вебхук агента (push, обратное направление)
+ssh -N -R 8080:localhost:8080 user@vps-ip &
+```
+
+🔒 **Security:** обратный проброс (`-R`) по умолчанию слушает только на `localhost` VPS — чтобы Alertmanager (тоже на VPS) до него достучался, этого достаточно и ничего дополнительно открывать не нужно. Если увидишь совет добавить `GatewayPorts yes` в `sshd_config` — не делай этого без крайней необходимости: это открывает порт всем, кто может подключиться к VPS, а не только локальным процессам. WireGuard этой проблемы не имеет вообще, поэтому он основной вариант, а SSH — только когда совсем нет времени поднимать VPN.
+
+### 4.4 — Telegram Bot API может быть недоступен из РФ
+
+`api.telegram.org` периодически блокируется/троттлится для российских IP. Если long polling агента (см. Q&A ниже про polling vs webhook) не получает обновления или зависает:
+- Проверь доступность напрямую: `curl -v https://api.telegram.org` с локальной машины
+- Если недоступно — нужен прокси/VPN именно для исходящих запросов к Telegram (это отдельная история от WireGuard-туннеля к VPS выше: тот туннель — для Prometheus/Loki/webhook, а этот — для доступа к самому Telegram)
 
 ---
 
@@ -177,6 +260,15 @@ alertmanager:
 
 **Создай `level-6-monitoring/alertmanager/alertmanager.yml`** (скопируй из `alerts/alertmanager-webhook.yml` в этой папке — там полный файл с комментариями).
 
+⚠️ **Важно поменять при копировании:** в шаблоне `url: 'http://ai-agent:8080/webhook'` — это docker DNS-имя из старой схемы, где агент жил в одной сети с Alertmanager. Теперь агент на локальной машине, замени на адрес локальной машины внутри туннеля:
+```yaml
+receivers:
+  - name: ai-agent
+    webhook_configs:
+      - url: 'http://10.8.0.2:8080/webhook'   # 10.8.0.2 — локальная машина в WireGuard-туннеле
+```
+Это и есть то самое обратное направление трафика (VPS → локальная машина) из Шага 4 — убедись что туннель поднят и агент слушает `:8080` ДО того как Alertmanager попробует достучаться.
+
 **Добавь в `level-6-monitoring/prometheus/prometheus.yml`:**
 ```yaml
 alerting:
@@ -185,14 +277,16 @@ alerting:
         - targets: ['alertmanager:9093']
 ```
 
-**Перезапусти level-6 стек:**
+**Перезапусти level-6 стек (на VPS, по SSH):**
 ```bash
-docker compose -f ../level-6-monitoring/docker-compose.yml up -d
+ssh user@vps-ip "cd ~/devops-project/level-6-monitoring && docker compose up -d"
 ```
 
 ---
 
-## Шаг 6 — Запустить агента
+## Шаг 6 — Запустить агента (на локальной машине)
+
+Сначала поправь `level-6.5-ai-agent/docker-compose.yml`: секция `networks.monitoring_net` (`external: true, name: level-6-monitoring_default`) — это остаток старой схемы, когда агент и мониторинг были на одном хосте в одной docker-сети. Такой сети на локальной машине нет и не будет — агент достаёт до Prometheus/Loki через WireGuard (Шаг 4), а не через docker network. Удали упоминания `monitoring_net` из сервиса `agent` и из секции `networks`, оставь только `agent_net`.
 
 ```bash
 cd level-6.5-ai-agent
@@ -256,11 +350,11 @@ curl -s -X POST http://localhost:8080/webhook \
 Теперь вызовем настоящий алерт остановив контейнер под нагрузкой:
 
 ```bash
-# Терминал 1: нагрузочный тест
+# Терминал 1 (локальная машина или VPS — k6 достаточно HTTP-доступа к nginx): нагрузочный тест
 k6 run ../level-2-scaling/load-tests/balancer-test.js
 
-# Терминал 2: убиваем бэкенд
-docker compose -f ../level-6-monitoring/docker-compose.yml stop backend_2
+# Терминал 2: убиваем бэкенд НА VPS
+ssh user@vps-ip "cd ~/devops-project/level-6-monitoring && docker compose stop backend_2"
 ```
 
 **Что наблюдать:**
@@ -323,7 +417,7 @@ cat agent/actions.py
 
 3. **Read-only API** — Prometheus и Loki доступны только для чтения. Агент не меняет конфигурацию мониторинга.
 
-4. **Нет SSH** — агент не может подключиться к серверам. Все действия через Docker API.
+4. **Нет интерактивного доступа к серверам** — `DOCKER_HOST=ssh://user@vps-ip` использует SSH только как транспорт для того же ограниченного Docker API (restart/scale конкретных контейнеров), это не shell и не произвольные команды на VPS.
 
 5. **Минимальный список действий** — только `restart` и `scale`. Нет `stop`, нет `rm`, нет `exec`.
 
@@ -345,16 +439,16 @@ cat agent/actions.py
 
 **"Container not found"** → Claude предложил имя сервиса которого нет. Логи покажут что искали. Агент вернёт "success: false" — в Telegram придёт сообщение об ошибке.
 
-**"Loki query failed"** → Проверь что агент в сети мониторинга: `docker network inspect level-6-monitoring_default | grep ai-agent`.
+**"Loki query failed"** → Проверь туннель, а не docker-сеть (агент и мониторинг теперь на разных хостах): `ping 10.8.0.1` и `curl http://10.8.0.1:3100/ready` с локальной машины. Если недоступно — `sudo wg show` на обеих сторонах, проверь что интерфейс `up`.
 
-**Prometheus метрики все `null`** → Метрики из level-6 backend используют специфичные labels. Убедись что `job` в алерте совпадает с job в Prometheus. Проверь в браузере: `http://localhost:9090/api/v1/label/job/values`.
+**Prometheus метрики все `null`** → Метрики из level-6 backend используют специфичные labels. Убедись что `job` в алерте совпадает с job в Prometheus. Проверь через туннель: `http://10.8.0.1:9090/api/v1/label/job/values` (не `localhost` — Prometheus теперь на другом хосте).
 
 ---
 
 ## На собеседовании спросят
 
 **Q: Как обеспечить безопасность AI-агента у которого есть доступ к инфраструктуре?**
-A: Принцип минимальных привилегий — агент имеет только то что нужно для своих задач. Read-only доступ к API метрик, write только для restart через Docker API (и то через защищённый список). Человек всегда в контуре принятия решения (approve/reject). Никакого SSH, никакого доступа к данным.
+A: Принцип минимальных привилегий — агент имеет только то что нужно для своих задач. Read-only доступ к API метрик, write только для restart через Docker API (и то через защищённый список, `PROTECTED_CONTAINERS`). SSH используется только как транспорт для того же ограниченного Docker API (`DOCKER_HOST=ssh://`), не как интерактивный shell-доступ. Человек всегда в контуре принятия решения (approve/reject).
 
 **Q: Что такое Human-in-the-loop и когда он необходим?**
 A: Паттерн где AI предлагает действие, а человек его подтверждает. Необходим когда действие необратимо или рискованно (рестарт БД), когда уверенность модели низкая, когда последствия широки (масштабирование дорогого ресурса). Для рутинных безопасных действий можно отказаться от подтверждения, но начинать всегда стоит с human-in-the-loop.
@@ -379,8 +473,106 @@ A: Вынести pending_actions в Redis (shared state между инстан
 - [ ] Организовать human-in-the-loop с inline кнопками Approve/Reject
 - [ ] Выполнять safe actions через Docker API с защищённым списком
 - [ ] Объяснить почему безопасность AI-агентов в инфраструктуре критична
+- [ ] Поднять WireGuard-туннель между двумя хостами и объяснить чем он отличается от однонаправленного SSH-проброса
+- [ ] Закрыть внутренние сервисы (Prometheus, Loki) от интернета через ufw, оставив доступ только из нужной подсети
 
 **Следующий шаг:** упаковать всё это в Helm-чарт и деплоить в Kubernetes → Уровень 7.
+
+---
+
+## Security Block: Уровень 6.5
+
+### AI-агент с доступом к инфраструктуре — новая поверхность атаки
+
+Этот уровень добавляет компонент, который может ВЫПОЛНЯТЬ действия на инфраструктуре (не только читать), да ещё и на основе решения LLM. Каждый принцип ниже — конкретный барьер против того, что может пойти не так.
+
+**1. Principle of Least Privilege — агент не может почти ничего**
+
+`PROTECTED_CONTAINERS` (`prometheus, grafana, loki, alertmanager, promtail, cadvisor, ai-agent`) — жёсткий allowlist того, что агент не тронет никогда, даже если LLM это предложит. Список разрешённых действий — только `restart`/`scale`, нет `stop`, `rm`, `exec`.
+
+**2. Default Deny на сети — закрыли то, что не должно быть открыто**
+
+Prometheus (`:9090`) и Loki (`:3100`) на VPS закрыты через ufw для всех, кроме подсети WireGuard-туннеля (`10.8.0.0/24`). До Level 6.5 эти порты были открыты в интернет — см. Security Block Level 6.
+
+**3. Defence in Depth — несколько независимых барьеров, не один**
+
+Даже если атакующий скомпрометирует агента (например, через prompt injection в логах, которые агент читает и передаёт в LLM), у него всё ещё нет: SSH shell-доступа (только Docker API через `DOCKER_HOST=ssh://`), доступа к защищённым контейнерам (`PROTECTED_CONTAINERS`), возможности действовать без Approve человека.
+
+**4. Human-in-the-loop — необратимые действия требует подтверждать человек**
+
+Агент не выполняет ничего автоматически — только предлагает через Telegram с кнопками Approve/Reject. Это осознанный компромисс скорости ради безопасности: LLM может галлюцинировать неверное действие, человек — последний фильтр.
+
+**5. Secrets Management**
+
+`CLAUDE_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` — в `.env`, не в коде и не в docker-compose.yml напрямую.
+
+⚠️ **Антипаттерны:**
+
+- **Публиковать порт 8080 агента наружу VPS без необходимости** — реальный трафик на webhook должен идти только по WireGuard-туннелю от Alertmanager; публикация на 0.0.0.0 расширяет поверхность атаки без пользы.
+- **`GatewayPorts yes` на SSH ради удобства reverse-tunnel** — открывает порт VPS всем, кто может подключиться, а не только нужному процессу. Почти всегда есть способ обойтись без этого (см. Шаг 4.3) — а лучше просто использовать WireGuard.
+
+---
+
+## Best Practices Checklist
+
+- [ ] `PROTECTED_CONTAINERS` в `actions.py` включает весь observability-стек и самого агента
+- [ ] Разрешённые действия агента — только `restart`/`scale`, никакого `exec`/`rm`/`stop`
+- [ ] Approve/Reject в Telegram работает и требуется на каждое действие — агент не действует автоматически
+- [ ] Порты 9090 (Prometheus) и 3100 (Loki) закрыты ufw для интернета, доступны только из `10.8.0.0/24`
+- [ ] WireGuard-туннель поднят на обеих сторонах (`wg show` показывает `latest handshake` недавним)
+- [ ] `DOCKER_HOST=ssh://` используется вместо примонтированного локального `docker.sock`
+- [ ] `.env` с `CLAUDE_API_KEY`/`TELEGRAM_BOT_TOKEN` не закоммичен в Git
+- [ ] Понимаешь разницу между ingress (webhook) и egress (Claude/Telegram) для этого сервиса
+
+---
+
+## Troubleshooting: Уровень 6.5
+
+### Проблемы с агентом и туннелем
+
+**1. Алерт сработал, но сообщение в Telegram не пришло**
+
+Симптом: `docker compose logs -f agent` не показывает `Processing alert`.
+
+```bash
+# Проверь что вебхук вообще дошёл до агента:
+curl http://localhost:8080/health
+# Проверь что Alertmanager реально пытался достучаться (на VPS):
+ssh user@vps-ip "docker compose -f ~/devops-project/level-6-monitoring/docker-compose.yml logs alertmanager | tail -30"
+```
+Вероятная причина: URL в `alertmanager.yml` указывает на docker DNS-имя (`ai-agent:8080`) вместо туннельного IP локальной машины (`10.8.0.2:8080`) — см. Шаг 5. Или туннель не поднят (`sudo wg show` на VPS).
+
+**2. `collect_context()` падает / `Loki query failed`**
+
+Симптом: в логах агента `Failed to process alert` с traceback внутри `diagnostics.py`.
+
+```bash
+ping 10.8.0.1
+curl http://10.8.0.1:9090/-/healthy
+curl http://10.8.0.1:3100/ready
+```
+Вероятная причина: WireGuard не поднят или ufw блокирует именно подсеть туннеля (проверь `sudo ufw status numbered` на VPS — правило должно разрешать `10.8.0.0/24`, не конкретный IP).
+
+**3. `execute_action` возвращает "Docker API error"**
+
+Симптом: в Telegram приходит отчёт с `success: false` после Approve.
+
+```bash
+docker -H ssh://user@vps-ip ps
+```
+Вероятная причина: `DOCKER_HOST` не экспортирован в окружении процесса агента, или SSH-ключ не подхватывается (агент запущен не тем пользователем, у которого настроен `~/.ssh/config` для VPS).
+
+**4. Telegram-бот не отвечает совсем, `getUpdates` пуст**
+
+Симптом: `long polling started` в логах есть, но callback от кнопок Approve/Reject не долетает.
+
+Вероятная причина: `api.telegram.org` заблокирован/троттлится в твоём регионе (см. Шаг 4.4) — проверь `curl -v https://api.telegram.org` напрямую, при необходимости нужен прокси/VPN для исходящих запросов к Telegram (отдельно от WireGuard-туннеля к VPS).
+
+**5. Alertmanager не может достучаться до агента, но с VPS всё выглядит нормально**
+
+Симптом: `curl http://10.8.0.2:8080/health` с VPS зависает или таймаутит.
+
+Вероятная причина: локальный firewall (ufw/Windows Defender/macOS Firewall) на самой рабочей машине блокирует входящие на `:8080` даже через интерфейс WireGuard — разреши явно для `wg0`/`utun` интерфейса.
 
 ---
 
@@ -400,7 +592,7 @@ git push origin main
 - [Концепция: LLM-in-the-loop агент в вакууме](../docs/architecture/level-6.5-ai-agent/concept.html) — LLM объясняет и предлагает, человек решает
 - [Реализация: реальный поток обработки алерта](../docs/architecture/level-6.5-ai-agent/implementation.html) — sequence-диаграмма webhook → Prometheus/Loki → Claude → Telegram → Docker API
 - [Боль → решение: Level 6 → Level 6.5](../docs/architecture/level-6.5-ai-agent/pain-solution.html) — от ручной интерпретации алертов к готовому диагнозу
-- [Сеть: webhook внутрь, API наружу](../docs/architecture/level-6.5-ai-agent/network.html) — ingress от Alertmanager + egress к Claude/Telegram в одном сервисе
+- [Сеть: агент вне VPS](../docs/architecture/level-6.5-ai-agent/network.html) — WireGuard-туннель между VPS и локальной машиной, ufw закрывает 9090/3100 для интернета
 
 **Теория сетей глубже:**
 - [Webhook (ingress) vs вызов API (egress)](../docs/architecture/networking-theory/08-webhooks-and-egress.html) — почему это разные направления трафика с разными требованиями к firewall

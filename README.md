@@ -10,7 +10,7 @@
 
 ## Подготовка виртуальной машины (Linux)
 
-> Всё выполняется на Linux VM (Ubuntu 22.04 / Debian 12). Рекомендуется: 4+ CPU, 8GB RAM, 40GB SSD.
+> Всё выполняется на Linux VM (Ubuntu 24.04 / Debian 12). Для старта (уровни 1-4, 9-10) достаточно 1-2 CPU / 2GB RAM / 20GB SSD; для Kubernetes и мониторинга (уровни 5-8) — от 4GB RAM. Профили и обоснование — [INFRASTRUCTURE_PLANNING.md](INFRASTRUCTURE_PLANNING.md).
 
 ### 1. Обновить систему
 

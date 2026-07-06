@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="generator" content="archify 2.9.0">
-  <title>Level 6.5 — сетевой путь: webhook внутрь, API наружу Diagram</title>
+  <title>Level 6.5 — сетевой путь: агент вне VPS Diagram</title>
   <script>
     // Resolve the theme before first paint so light-preference users don't
     // see a dark flash. The toolbar script below re-applies with UI state.
@@ -525,14 +525,14 @@
     <div class="header">
       <div class="header-row">
         <div class="pulse-dot"></div>
-        <h1>Level 6.5 — сетевой путь: webhook внутрь, API наружу</h1>
+        <h1>Level 6.5 — сетевой путь: агент вне VPS</h1>
       </div>
-      <p class="subtitle">Один сервис принимает ingress И делает egress к двум внешним API</p>
+      <p class="subtitle">VPS и локальная машина соединены WireGuard-туннелем; наружу VPS торчит только сам туннель</p>
     </div>
 
     <!-- Main Diagram -->
     <div class="diagram-container">
-      <svg viewBox="0 0 830 632" role="img" aria-label="Level 6.5 — сетевой путь: webhook внутрь, API наружу — Один сервис принимает ingress И делает egress к двум внешним API (architecture diagram)">
+      <svg viewBox="0 0 1000 812" role="img" aria-label="Level 6.5 — сетевой путь: агент вне VPS — VPS и локальная машина соединены WireGuard-туннелем; наружу VPS торчит только сам туннель (architecture diagram)">
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -556,61 +556,82 @@
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Boundaries (behind everything) -->
-        <rect x="10" y="270" width="530" height="134" rx="8" class="c-security-group" stroke-width="1"/>
-        <text x="18" y="288" class="t-security" font-size="9" font-weight="600">monitoring_net (shared с Level 6)</text>
+        <rect x="10" y="70" width="260" height="674" rx="12" class="c-region" stroke-width="1"/>
+        <text x="18" y="88" class="t-cloud" font-size="9" font-weight="600">VPS — публичный IP (наружу только WireGuard :51820/udp)</text>
+
+        <rect x="400" y="340" width="270" height="134" rx="8" class="c-security-group" stroke-width="1"/>
+        <text x="408" y="358" class="t-security" font-size="9" font-weight="600">Локальная машина</text>
 
         <!-- Connection paths (before components for correct z-order) -->
-        <path d="M 230 342 L 320 342" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 415 300 L 504.5 300 Q 512.5 300 512.5 292 L 512.5 190 Q 512.5 182 520.5 182 L 610 182" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        <path d="M 415 384 L 504.5 384 Q 512.5 384 512.5 392 L 512.5 494 Q 512.5 502 520.5 502 L 610 502" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        <path d="M 415 384 L 415 480" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        <path d="M 220 142 L 317 142 Q 325 142 325 150 L 325 404 Q 325 412 333 412 L 430 412" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path d="M 430 412 L 343 412 Q 335 412 335 404 L 335 330 Q 335 322 327 322 L 240 322" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path d="M 430 412 L 343 412 Q 335 412 335 420 L 335 494 Q 335 502 327 502 L 240 502" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path d="M 430 412 L 343 412 Q 335 412 335 420 L 335 674 Q 335 682 327 682 L 240 682" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        <path d="M 640 412 L 702 412 Q 710 412 710 404 L 710 230 Q 710 222 718 222 L 780 222" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path d="M 640 412 L 702 412 Q 710 412 710 420 L 710 594 Q 710 602 718 602 L 780 602" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
 
         <!-- Components -->
-        <rect x="40" y="300" width="190" height="84" rx="6" class="c-mask"/>
-        <rect x="40" y="300" width="190" height="84" rx="6" class="c-cloud" stroke-width="1.5"/>
-        <text x="135" y="340" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Alertmanager</text>
-        <text x="135" y="356" class="t-muted" font-size="9" text-anchor="middle">level-6-monitoring_default</text>
+        <rect x="40" y="100" width="180" height="84" rx="6" class="c-mask"/>
+        <rect x="40" y="100" width="180" height="84" rx="6" class="c-cloud" stroke-width="1.5"/>
+        <text x="130" y="140" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Alertmanager</text>
+        <text x="130" y="156" class="t-muted" font-size="9" text-anchor="middle">на VPS</text>
 
-        <rect x="320" y="300" width="190" height="84" rx="6" class="c-mask"/>
-        <rect x="320" y="300" width="190" height="84" rx="6" class="c-backend" stroke-width="1.5"/>
-        <text x="415" y="346" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">ai-agent :8080</text>
-        <text x="415" y="376" class="t-backend" font-size="7" text-anchor="middle">в 2 docker-сетях сразу</text>
+        <rect x="40" y="280" width="200" height="84" rx="6" class="c-mask"/>
+        <rect x="40" y="280" width="200" height="84" rx="6" class="c-database" stroke-width="1.5"/>
+        <text x="140" y="326" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Prometheus :9090</text>
+        <text x="140" y="356" class="t-database" font-size="7" text-anchor="middle">ufw: только из 10.8.0.0/24</text>
 
-        <rect x="610" y="140" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="610" y="140" width="180" height="84" rx="6" class="c-external" stroke-width="1.5"/>
-        <text x="700" y="180" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Claude API</text>
-        <text x="700" y="196" class="t-muted" font-size="9" text-anchor="middle">api.anthropic.com</text>
+        <rect x="40" y="460" width="200" height="84" rx="6" class="c-mask"/>
+        <rect x="40" y="460" width="200" height="84" rx="6" class="c-database" stroke-width="1.5"/>
+        <text x="140" y="506" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Loki :3100</text>
+        <text x="140" y="536" class="t-database" font-size="7" text-anchor="middle">ufw: только из 10.8.0.0/24</text>
 
-        <rect x="610" y="460" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="610" y="460" width="180" height="84" rx="6" class="c-external" stroke-width="1.5"/>
-        <text x="700" y="500" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Telegram API</text>
-        <text x="700" y="516" class="t-muted" font-size="9" text-anchor="middle">api.telegram.org</text>
+        <rect x="40" y="640" width="200" height="84" rx="6" class="c-mask"/>
+        <rect x="40" y="640" width="200" height="84" rx="6" class="c-security" stroke-width="1.5"/>
+        <text x="140" y="686" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Docker daemon VPS</text>
+        <text x="140" y="716" class="t-security" font-size="7" text-anchor="middle">restart через SSH-транспорт</text>
 
-        <rect x="320" y="480" width="190" height="84" rx="6" class="c-mask"/>
-        <rect x="320" y="480" width="190" height="84" rx="6" class="c-security" stroke-width="1.5"/>
-        <text x="415" y="526" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">docker.sock</text>
-        <text x="415" y="556" class="t-security" font-size="7" text-anchor="middle">read-write, только restart</text>
+        <rect x="430" y="370" width="210" height="84" rx="6" class="c-mask"/>
+        <rect x="430" y="370" width="210" height="84" rx="6" class="c-backend" stroke-width="1.5"/>
+        <text x="535" y="410" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">ai-agent :8080</text>
+        <text x="535" y="426" class="t-muted" font-size="9" text-anchor="middle">локальная машина, 10.8.0.2</text>
+
+        <rect x="780" y="180" width="180" height="84" rx="6" class="c-mask"/>
+        <rect x="780" y="180" width="180" height="84" rx="6" class="c-external" stroke-width="1.5"/>
+        <text x="870" y="220" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Claude API</text>
+        <text x="870" y="236" class="t-muted" font-size="9" text-anchor="middle">api.anthropic.com</text>
+
+        <rect x="780" y="560" width="180" height="84" rx="6" class="c-mask"/>
+        <rect x="780" y="560" width="180" height="84" rx="6" class="c-external" stroke-width="1.5"/>
+        <text x="870" y="600" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Telegram API</text>
+        <text x="870" y="616" class="t-muted" font-size="9" text-anchor="middle">api.telegram.org</text>
 
         <!-- Connection labels -->
-        <rect x="226.8" y="276" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
-        <text x="275" y="286" class="t-backend" font-size="8" text-anchor="middle">POST :8080/webhook</text>
-        <rect x="449.9" y="221" width="125.19999999999999" height="14" rx="3" class="c-mask"/>
-        <text x="512.5" y="231" class="t-messagebus" font-size="8" text-anchor="middle">HTTPS исходящий (egress)</text>
-        <rect x="425.9" y="423" width="173.2" height="14" rx="3" class="c-mask"/>
-        <text x="512.5" y="433" class="t-messagebus" font-size="8" text-anchor="middle">HTTPS исходящий (egress + polling)</text>
-        <rect x="364.4" y="286" width="101.2" height="14" rx="3" class="c-mask"/>
-        <text x="415" y="296" class="t-security" font-size="8" text-anchor="middle">restart (allowlist)</text>
+        <rect x="214.4" y="257" width="221.2" height="14" rx="3" class="c-mask"/>
+        <text x="325" y="267" class="t-backend" font-size="8" text-anchor="middle">POST /webhook, через туннель (VPS→локальная)</text>
+        <rect x="260.4" y="347" width="149.2" height="14" rx="3" class="c-mask"/>
+        <text x="335" y="357" class="t-muted" font-size="8" text-anchor="middle">pull, через WireGuard-туннель</text>
+        <rect x="260.4" y="437" width="149.2" height="14" rx="3" class="c-mask"/>
+        <text x="335" y="447" class="t-muted" font-size="8" text-anchor="middle">pull, через WireGuard-туннель</text>
+        <rect x="262.8" y="527" width="144.4" height="14" rx="3" class="c-mask"/>
+        <text x="335" y="537" class="t-security" font-size="8" text-anchor="middle">restart (allowlist), SSH :22</text>
+        <rect x="676.2" y="297" width="67.6" height="14" rx="3" class="c-mask"/>
+        <text x="710" y="307" class="t-messagebus" font-size="8" text-anchor="middle">HTTPS egress</text>
+        <rect x="652.2" y="487" width="115.6" height="14" rx="3" class="c-mask"/>
+        <text x="710" y="497" class="t-messagebus" font-size="8" text-anchor="middle">HTTPS egress + polling</text>
 
         <!-- Legend -->
-        <text x="40" y="603" class="t-primary" font-size="9" font-weight="600">Legend</text>
-        <rect x="40" y="608" width="14" height="9" rx="2" class="c-cloud" stroke-width="1"/>
-        <text x="60" y="616" class="t-muted" font-size="8">Cloud</text>
-        <rect x="123" y="608" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
-        <text x="143" y="616" class="t-muted" font-size="8">Backend</text>
-        <rect x="216" y="608" width="14" height="9" rx="2" class="c-external" stroke-width="1"/>
-        <text x="236" y="616" class="t-muted" font-size="8">External</text>
-        <rect x="314" y="608" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
-        <text x="334" y="616" class="t-muted" font-size="8">Security</text>
+        <text x="40" y="783" class="t-primary" font-size="9" font-weight="600">Legend</text>
+        <rect x="40" y="788" width="14" height="9" rx="2" class="c-cloud" stroke-width="1"/>
+        <text x="60" y="796" class="t-muted" font-size="8">Cloud</text>
+        <rect x="123" y="788" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
+        <text x="143" y="796" class="t-muted" font-size="8">Database</text>
+        <rect x="221" y="788" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
+        <text x="241" y="796" class="t-muted" font-size="8">Security</text>
+        <rect x="319" y="788" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
+        <text x="339" y="796" class="t-muted" font-size="8">Backend</text>
+        <rect x="412" y="788" width="14" height="9" rx="2" class="c-external" stroke-width="1"/>
+        <text x="432" y="796" class="t-muted" font-size="8">External</text>
       </svg>
     </div>
 
@@ -622,30 +643,19 @@
           <h3>🧠 Держи в голове</h3>
         </div>
         <ul>
-          <li>&bull; Порт 8080 published в docker-compose (&quot;8080:8080&quot;), но реальный трафик на него должен приходить ТОЛЬКО от Alertmanager внутри общей сети monitoring_net — текущий конфиг всё равно публикует его на хост, что лишнее</li>
-          <li>&bull; Исходящие соединения к Claude API и Telegram API идут по HTTPS наружу (egress) — egress обычно не фильтруется firewall&#39;ом так же строго, как ingress, но оба API получают доступ к содержимому твоих алертов и логов — это тоже поверхность атаки</li>
-          <li>&bull; docker.sock смонтирован НЕ read-only — единственное исключение из принципа read-only observability, компенсируется PROTECTED_CONTAINERS allowlist в коде агента</li>
+          <li>&bull; WireGuard создаёт полноценную двустороннюю приватную сеть (10.8.0.0/24), а не однонаправленный проброс — Alertmanager на VPS сам достучится до вебхука агента на локальной машине, а не только наоборот</li>
+          <li>&bull; Единственный новый порт, открытый наружу VPS — 51820/udp для WireGuard; 9090 и 3100 закрыты для интернета и доступны только из подсети туннеля</li>
+          <li>&bull; restart-действия идут через SSH-транспорт Docker API (DOCKER_HOST=ssh://) — это использует уже существующий SSH-доступ, не открывает отдельный TCP-порт для Docker API</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot amber"></div>
-          <h3>Направления трафика на этой схеме</h3>
+          <h3>Если WireGuard недоступен (SSH fallback)</h3>
         </div>
         <ul>
-          <li>&bull; Ingress (входящий): только webhook от Alertmanager — единственная дверь внутрь</li>
-          <li>&bull; Egress (исходящий): к Claude и Telegram — инициирует всегда агент, никогда наоборот</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <div class="card-dot cyan"></div>
-          <h3>Теория глубже</h3>
-        </div>
-        <ul>
-          <li>&bull; ../networking-theory/08-webhooks-and-egress.html — почему webhook требует ingress, а вызов внешнего API — нет</li>
+          <li>&bull; Обычный SSH-туннель однонаправленный: для направления VPS → локальная машина (вебхук) нужен отдельный reverse-forward (-R), это менее надёжно при обрывах связи, чем постоянный WireGuard-интерфейс</li>
         </ul>
       </div>
     </div>

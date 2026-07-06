@@ -2,151 +2,41 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "Level 6.5 — сетевой путь: webhook внутрь, API наружу",
-    "subtitle": "Один сервис принимает ingress И делает egress к двум внешним API",
+    "title": "Level 6.5 — сетевой путь: агент вне VPS",
+    "subtitle": "VPS и локальная машина соединены WireGuard-туннелем; наружу VPS торчит только сам туннель",
     "output": "network.html"
   },
   "components": [
-    {
-      "id": "alertmanager",
-      "type": "cloud",
-      "label": "Alertmanager",
-      "sublabel": "level-6-monitoring_default",
-      "pos": [
-        40,
-        300
-      ],
-      "size": [
-        190,
-        84
-      ]
-    },
-    {
-      "id": "agent",
-      "type": "backend",
-      "label": "ai-agent :8080",
-      "tag": "в 2 docker-сетях сразу",
-      "pos": [
-        320,
-        300
-      ],
-      "size": [
-        190,
-        84
-      ]
-    },
-    {
-      "id": "claude",
-      "type": "external",
-      "label": "Claude API",
-      "sublabel": "api.anthropic.com",
-      "pos": [
-        610,
-        140
-      ],
-      "size": [
-        180,
-        84
-      ]
-    },
-    {
-      "id": "telegram",
-      "type": "external",
-      "label": "Telegram API",
-      "sublabel": "api.telegram.org",
-      "pos": [
-        610,
-        460
-      ],
-      "size": [
-        180,
-        84
-      ]
-    },
-    {
-      "id": "dockersock",
-      "type": "security",
-      "label": "docker.sock",
-      "tag": "read-write, только restart",
-      "pos": [
-        320,
-        480
-      ],
-      "size": [
-        190,
-        84
-      ]
-    }
+    { "id": "alertmanager", "type": "cloud", "label": "Alertmanager", "sublabel": "на VPS", "pos": [40, 100], "size": [180, 84] },
+    { "id": "prometheus", "type": "database", "label": "Prometheus :9090", "tag": "ufw: только из 10.8.0.0/24", "pos": [40, 280], "size": [200, 84] },
+    { "id": "loki", "type": "database", "label": "Loki :3100", "tag": "ufw: только из 10.8.0.0/24", "pos": [40, 460], "size": [200, 84] },
+    { "id": "dockervps", "type": "security", "label": "Docker daemon VPS", "tag": "restart через SSH-транспорт", "pos": [40, 640], "size": [200, 84] },
+
+    { "id": "agent", "type": "backend", "label": "ai-agent :8080", "sublabel": "локальная машина, 10.8.0.2", "pos": [430, 370], "size": [210, 84] },
+
+    { "id": "claude", "type": "external", "label": "Claude API", "sublabel": "api.anthropic.com", "pos": [780, 180], "size": [180, 84] },
+    { "id": "telegram", "type": "external", "label": "Telegram API", "sublabel": "api.telegram.org", "pos": [780, 560], "size": [180, 84] }
   ],
   "boundaries": [
-    {
-      "kind": "security-group",
-      "label": "monitoring_net (shared с Level 6)",
-      "wraps": [
-        "alertmanager",
-        "agent"
-      ]
-    }
+    { "kind": "region", "label": "VPS — публичный IP (наружу только WireGuard :51820/udp)", "wraps": ["alertmanager", "prometheus", "loki", "dockervps"] },
+    { "kind": "security-group", "label": "Локальная машина", "wraps": ["agent"] }
   ],
   "connections": [
-    {
-      "from": "alertmanager",
-      "to": "agent",
-      "label": "POST :8080/webhook",
-      "variant": "emphasis",
-      "labelDy": -46
-    },
-    {
-      "from": "agent",
-      "to": "claude",
-      "label": "HTTPS исходящий (egress)",
-      "variant": "dashed",
-      "fromSide": "top",
-      "toSide": "left"
-    },
-    {
-      "from": "agent",
-      "to": "telegram",
-      "label": "HTTPS исходящий (egress + polling)",
-      "variant": "dashed",
-      "fromSide": "bottom",
-      "toSide": "left"
-    },
-    {
-      "from": "agent",
-      "to": "dockersock",
-      "label": "restart (allowlist)",
-      "variant": "security",
-      "labelAt": [
-        415,
-        296
-      ]
-    }
+    { "from": "alertmanager", "to": "agent", "label": "POST /webhook, через туннель (VPS→локальная)", "variant": "emphasis" },
+    { "from": "agent", "to": "prometheus", "label": "pull, через WireGuard-туннель", "variant": "default", "fromSide": "left", "toSide": "right" },
+    { "from": "agent", "to": "loki", "label": "pull, через WireGuard-туннель", "variant": "default", "fromSide": "left", "toSide": "right" },
+    { "from": "agent", "to": "dockervps", "label": "restart (allowlist), SSH :22", "variant": "security", "fromSide": "left", "toSide": "right" },
+    { "from": "agent", "to": "claude", "label": "HTTPS egress", "variant": "dashed" },
+    { "from": "agent", "to": "telegram", "label": "HTTPS egress + polling", "variant": "dashed" }
   ],
   "cards": [
-    {
-      "dot": "rose",
-      "title": "🧠 Держи в голове",
-      "items": [
-        "Порт 8080 published в docker-compose (\"8080:8080\"), но реальный трафик на него должен приходить ТОЛЬКО от Alertmanager внутри общей сети monitoring_net — текущий конфиг всё равно публикует его на хост, что лишнее",
-        "Исходящие соединения к Claude API и Telegram API идут по HTTPS наружу (egress) — egress обычно не фильтруется firewall'ом так же строго, как ingress, но оба API получают доступ к содержимому твоих алертов и логов — это тоже поверхность атаки",
-        "docker.sock смонтирован НЕ read-only — единственное исключение из принципа read-only observability, компенсируется PROTECTED_CONTAINERS allowlist в коде агента"
-      ]
-    },
-    {
-      "dot": "amber",
-      "title": "Направления трафика на этой схеме",
-      "items": [
-        "Ingress (входящий): только webhook от Alertmanager — единственная дверь внутрь",
-        "Egress (исходящий): к Claude и Telegram — инициирует всегда агент, никогда наоборот"
-      ]
-    },
-    {
-      "dot": "cyan",
-      "title": "Теория глубже",
-      "items": [
-        "../networking-theory/08-webhooks-and-egress.html — почему webhook требует ingress, а вызов внешнего API — нет"
-      ]
-    }
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "WireGuard создаёт полноценную двустороннюю приватную сеть (10.8.0.0/24), а не однонаправленный проброс — Alertmanager на VPS сам достучится до вебхука агента на локальной машине, а не только наоборот",
+      "Единственный новый порт, открытый наружу VPS — 51820/udp для WireGuard; 9090 и 3100 закрыты для интернета и доступны только из подсети туннеля",
+      "restart-действия идут через SSH-транспорт Docker API (DOCKER_HOST=ssh://) — это использует уже существующий SSH-доступ, не открывает отдельный TCP-порт для Docker API"
+    ]},
+    { "dot": "amber", "title": "Если WireGuard недоступен (SSH fallback)", "items": [
+      "Обычный SSH-туннель однонаправленный: для направления VPS → локальная машина (вебхук) нужен отдельный reverse-forward (-R), это менее надёжно при обрывах связи, чем постоянный WireGuard-интерфейс"
+    ]}
   ]
 }

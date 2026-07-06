@@ -388,9 +388,9 @@ A: Через `Chart.yaml → dependencies`. Можно указать что в
 - [ ] Понять разницу rolling update vs blue-green vs canary
 - [ ] `helm template` и `helm lint` для отладки до деплоя
 
-**Поздравляю — все 7 основных уровней пройдены!**
+**Поздравляю — основы деплоя в Kubernetes пройдены!**
 
-Дальше: `level-3.5-https` (Traefik + TLS), `level-8-gitops` (ArgoCD), `level-9-terraform` (Infrastructure as Code).
+Дальше: `level-8-gitops` (ArgoCD) → `level-9-terraform` (Infrastructure as Code) → `level-10-ansible` (config management).
 
 ---
 

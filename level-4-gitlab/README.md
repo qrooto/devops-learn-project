@@ -399,6 +399,101 @@ A: Разные jobs с разными `environment:` и разными усло
 
 ---
 
+## Security Block: Уровень 4 (GitLab)
+
+### Self-hosted платформа — сам себе облако, сам себе и защита
+
+В отличие от GitHub/GitLab.com, здесь никто за тебя не патчит сервер и не следит за доступом — вся ответственность на тебе.
+
+**1. Первые минуты после установки — самое уязвимое окно**
+
+`initial_root_password` живёт в файле только 24 часа не просто так — пароль сгенерирован автоматически и должен быть заменён немедленно (Шаг 2). Публичная регистрация и публичная видимость проектов отключены сразу же (`Sign-up enabled` → off, `Default project visibility` → Private) — иначе self-hosted GitLab на публичном IP превращается в открытую платформу для кого угодно.
+
+**2. Docker-in-Docker и privileged-режим — осознанный компромисс**
+
+`gitlab-runner register --docker-privileged` даёт раннеру расширенные права почти до уровня хоста — это нужно, чтобы job'ы сами могли делать `docker build`. Это реальный компромисс безопасности ради функциональности: скомпрометированный job получает гораздо больше, чем без privileged. Смягчение — раннер выполняет только код из твоего же репозитория (или проверенных MR), не произвольный внешний код.
+
+**3. Разделение портов — SSH-порт GitLab не совпадает с системным**
+
+GitLab слушает git-SSH на `2222`, а не на `22` — системный SSH с Level 0 остаётся отдельным и не смешивается с git-трафиком (см. network-схему уровня).
+
+**4. Registry credentials — управляются автоматически, не хардкодятся**
+
+`$CI_REGISTRY_USER`/`$CI_REGISTRY_PASSWORD` — временные автоматические переменные GitLab, не токены, которые ты создаёшь и куда-то вписываешь руками.
+
+⚠️ **Антипаттерны:**
+
+- **Не сменить root-пароль в первые же минуты** — окно между установкой и первым логином видно в логах Docker и потенциально доступно любому, кто уже знает дефолт до твоей смены пароля.
+- **Смонтировать `/var/run/docker.sock` с хоста в раннер вместо DinD "для простоты"** — это даёт раннеру полный контроль над Docker хост-машины (может управлять ЛЮБЫМ контейнером, включая сам GitLab), а не только временным DinD-демоном внутри job'а.
+
+---
+
+## Best Practices Checklist
+
+- [ ] Root-пароль сменён сразу после первого входа, файл `initial_root_password` не используется повторно
+- [ ] `Sign-up enabled` выключен — новые пользователи не могут зарегистрироваться сами
+- [ ] `Default project visibility` — Private, а не Public/Internal
+- [ ] Protected branch на `main` — пуш только через Merge Request
+- [ ] CI/CD-секреты (SSH-ключ для деплоя) добавлены как **Masked + Protected** переменные, не в `.gitlab-ci.yml`
+- [ ] Раннер использует `--docker-privileged`/DinD, а не смонтированный хостовый `docker.sock`
+- [ ] Понимаешь, почему GitLab SSH на 2222, а не на 22
+
+---
+
+## Troubleshooting: Уровень 4 (GitLab)
+
+### Проблемы с self-hosted платформой
+
+**1. GitLab не отвечает / контейнер падает по памяти**
+
+Симптом: `docker compose ps` показывает `gitlab` в статусе `Restarting` или `Exited`.
+
+```bash
+docker compose logs gitlab | tail -50
+free -h
+```
+Вероятная причина: недостаточно RAM (нужно минимум 4GB, см. Требования к VM) — GitLab CE один занимает 2-3GB при старте. Добавь swap или увеличь VM.
+
+**2. Runner видит job, но он висит в `pending`**
+
+Симптом: pipeline создан, job не переходит в `running`.
+
+```bash
+docker compose logs gitlab-runner | tail -30
+# В GitLab UI: Settings → CI/CD → Runners — раннер должен быть "online" (зелёная точка)
+```
+Вероятная причина: раннер не зарегистрирован (см. Шаг 5, `runner/register.sh`) или тег job'а (`tags: [docker, linux]`) не совпадает с тегами раннера.
+
+**3. "Docker-in-Docker permission denied" внутри job'а**
+
+Симптом: job падает на любой `docker build`/`docker push` команде.
+
+```bash
+cat .gitlab-ci.yml | grep -A3 "services:"
+```
+Вероятная причина: в job нет `services: - docker:dind`, либо раннер зарегистрирован без `--docker-privileged` — без него DinD не может поднять свой daemon.
+
+**4. Деплой падает на SSH-шаге**
+
+Симптом: job `deploy-prod` падает с `Permission denied (publickey)` или `Host key verification failed`.
+
+```bash
+# Проверь что переменные заданы (Settings → CI/CD → Variables):
+# SSH_PRIVATE_KEY, SERVER_HOST, SERVER_USER
+```
+Вероятная причина: приватный ключ не добавлен как CI/CD-переменная целиком (включая `-----BEGIN...-----`/`-----END...-----`), либо публичный ключ не добавлен в `~/.ssh/authorized_keys` на VPS.
+
+**5. Registry: `docker login` из job'а не проходит**
+
+Симптом: `unauthorized: authentication required` на `docker push`.
+
+```bash
+echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+```
+Вероятная причина: используется старый/личный токен вместо автоматических `$CI_REGISTRY_USER`/`$CI_REGISTRY_PASSWORD` — они действительны только во время выполнения конкретного job'а.
+
+---
+
 ## Коммит
 
 ```bash

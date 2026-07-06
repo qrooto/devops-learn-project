@@ -15,7 +15,7 @@
     { "id": "claude", "type": "external", "label": "Claude API", "sublabel": "diagnose()" },
     { "id": "telegram", "type": "external", "label": "Telegram API", "sublabel": "бот" },
     { "id": "operator", "type": "external", "label": "Оператор", "sublabel": "дежурный" },
-    { "id": "docker", "type": "security", "label": "Docker API", "sublabel": "restart only" }
+    { "id": "docker", "type": "security", "label": "Docker VPS", "sublabel": "restart, транспорт SSH" }
   ],
   "segments": [
     { "from": 150, "to": 330, "label": "1. Webhook + сбор контекста" },
@@ -41,7 +41,7 @@
   "cards": [
     { "dot": "rose", "title": "🧠 Держи в голове", "items": [
       "Каждый шаг — async, обработка алертов не блокирует приём новых вебхуков (FastAPI BackgroundTasks): второй алерт не ждёт, пока первый доедет до Telegram",
-      "docker.sock смонтирован НЕ read-only, потому что restart требует записи — единственное отступление от 'read-only observability', явно ограниченное allowlist'ом контейнеров",
+      "Агент — на локальной машине, не на VPS: до Docker API VPS достаёт через DOCKER_HOST=ssh://, до Prometheus/Loki — через WireGuard-туннель (см. network-схему); единственное отступление от 'read-only observability' — запись при restart, явно ограниченная allowlist'ом контейнеров",
       "PROTECTED_CONTAINERS — агент физически не может тронуть prometheus, grafana, loki, alertmanager, promtail, cadvisor и самого себя, даже если LLM это предложит"
     ]},
     { "dot": "amber", "title": "Что если LLM ошибётся", "items": [

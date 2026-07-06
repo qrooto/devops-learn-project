@@ -99,6 +99,8 @@ localhost ansible_connection=local
 **Задание:** Что значит `ansible_connection=local`? Почему для localhost не нужен SSH?
 (Ответ: Ansible может управлять самим собой без SSH — выполняет команды напрямую в процессе.)
 
+ℹ️ Ansible ходит в системный `/usr/bin/python3` через `ansible_python_interpreter` (см. `[all:vars]` в `hosts.ini`) — это тот же Python, для которого на Ubuntu 24.04 действует PEP 668 (см. заметку в Level 0). Если роль ставит Python-библиотеку через `pip` прямо на управляемый хост — используй venv или `pip: state=present` с `extra_args: --break-system-packages` только когда осознанно понимаешь риск.
+
 ---
 
 ## Шаг 3 — Ad-hoc команды (без плейбука)
@@ -146,7 +148,7 @@ ansible-playbook playbooks/check.yml
 **Что увидишь:**
 ```
 TASK [Display OS info]
-ok: [localhost] => {"msg": "Ubuntu 22.04 LTS (x86_64), 8192 MB RAM"}
+ok: [localhost] => {"msg": "Ubuntu 24.04 LTS (x86_64), 8192 MB RAM"}
 
 TASK [Check Docker]
 ok: [localhost] => {"msg": "Docker 24.x — installed"}

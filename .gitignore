@@ -27,3 +27,6 @@ CLAUDE.md
 
 # GitLab runner config (содержит токены)
 **/runner/config/config.toml
+
+# AI-саботаж (level learning, см. CLAUDE.md)
+.sabotage-log.md

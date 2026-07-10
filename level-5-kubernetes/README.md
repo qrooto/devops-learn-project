@@ -890,7 +890,7 @@ kubectl delete deployment backend-canary -n bulletin-board
 
 ### Точный контроль процентов: nginx-ingress canary
 
-Подход с репликами даёт приблизительный процент. В production для точного `weight=20%` используют nginx-ingress canary:
+Подход с репликами даёт приблизительный процент. В production для точного `weight=20%` используют nginx-ingress canary (сам Ingress и его контроллер разбираются на уровне 5.5):
 
 ```yaml
 # Ingress для основного трафика (stable):
@@ -1004,7 +1004,29 @@ minikube delete
 
 ---
 
+## FAQ: база в кластере — Deployment, StatefulSet или вообще снаружи?
+
+Это классический вопрос-ловушка на собеседованиях: «у вас Postgres в Deployment? а почему не StatefulSet?». Разберём честно.
+
+**Почему у нас Deployment + PVC — и это ОК.** У нас одна реплика Postgres, и один PVC примонтирован к этому единственному Pod-у. При пересоздании Pod-а новый подключает тот же PVC — данные на месте. Все гарантии StatefulSet при `replicas: 1` ничего не добавляют, а манифест проще. Для учебного стенда и любых одиночных инстансов это нормальное решение.
+
+**Когда нужен StatefulSet.** Он существует для рабочих нагрузок, где у реплик есть *личность*:
+- **Stable network identity** — Pod-ы называются `postgres-0`, `postgres-1`, `postgres-2` и получают постоянные DNS-имена (через headless Service). Реплика №2 после пересоздания остаётся «№2». У Deployment Pod-ы безымянны и взаимозаменяемы (`backend-7f9b...-x2x4`).
+- **Per-replica storage** — `volumeClaimTemplates` создаёт каждой реплике СВОЙ PVC. У Deployment все реплики делили бы один (а RWO-диск вообще не смонтируется на двух нодах).
+- **Ordered rollout** — Pod-ы создаются и обновляются по порядку: 0 → 1 → 2, удаление в обратном.
+
+Всё это критично, когда у базы репликация: primary (`postgres-0`) и standby (`postgres-1`) — это РАЗНЫЕ роли, их нельзя пересоздавать вслепую и в произвольном порядке. Итого: **несколько реплик stateful-сервиса → StatefulSet; одна реплика → достаточно Deployment + PVC**.
+
+**Почему в проде базу часто выносят из кластера вообще.** Managed DB (RDS, Cloud SQL, Yandex Managed PostgreSQL) даёт бэкапы с point-in-time recovery, репликацию, failover и обновления версий — чужими руками и с SLA. Самостоятельно поднять это в кластере — недели работы и постоянная эксплуатационная нагрузка (поэтому если уж в кластере — то через операторы вроде CloudNativePG, а не голым StatefulSet). Кластер прекрасен для stateless-приложений: Pod-ы можно убивать и двигать. База — это ровно то, что убивать и двигать больно.
+
+**Упражнение (опционально):** переведи Postgres на StatefulSet — `kind: StatefulSet`, добавь `serviceName: postgres`, замени PVC на `volumeClaimTemplates`, сделай Service headless (`clusterIP: None`). Затем удали Pod и сравни с Deployment: имя Pod-а сохранится (`postgres-0`), PVC будет называться `storage-postgres-0`, DNS-имя `postgres-0.postgres` — постоянное.
+
+---
+
 ## На собеседовании спросят
+
+**Q: Почему Postgres у вас Deployment, а не StatefulSet? Когда нужен StatefulSet?**
+A: Одна реплика + один PVC — гарантии StatefulSet ничего не добавляют. StatefulSet нужен при нескольких stateful-репликах: стабильные имена/DNS (postgres-0, postgres-1), свой PVC на реплику (volumeClaimTemplates), упорядоченный rollout — без этого не построить репликацию primary/standby. В проде базу чаще выносят в managed DB (см. FAQ выше).
 
 **Q: В чём разница между Pod, Deployment и ReplicaSet?**
 A: Pod — один экземпляр приложения (1-2 контейнера). ReplicaSet — следит что работает N Pod. Deployment — управляет ReplicaSet, добавляет rolling update и история ревизий. В обычной работе работают только с Deployment, ReplicaSet и Pod создаются автоматически.

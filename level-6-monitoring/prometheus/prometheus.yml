@@ -2,6 +2,16 @@ global:
   scrape_interval: 15s       # как часто собирать метрики
   evaluation_interval: 15s   # как часто вычислять alert-rules
 
+# Правила алертов (вычисляет Prometheus)
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+# Куда отправлять сработавшие алерты (доставляет Alertmanager)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
 scrape_configs:
   # Сам Prometheus собирает метрики о себе
   - job_name: 'prometheus'

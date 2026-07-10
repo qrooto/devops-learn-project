@@ -1,0 +1,40 @@
+# Alert rules — правила при которых Prometheus создаёт алерт.
+# Prometheus только ВЫЧИСЛЯЕТ алерты (условие → pending → firing),
+# маршрутизирует и доставляет их Alertmanager (см. alerting в prometheus.yml).
+groups:
+  - name: bulletin-board
+    rules:
+      # Бэкенд недоступен: метрика up = 0 значит scrape не удался
+      - alert: BackendDown
+        expr: up{job=~"backend.*"} == 0
+        for: 30s              # условие держится 30 сек → firing (защита от мигания)
+        labels:
+          severity: critical
+        annotations:
+          summary: "Бэкенд {{ $labels.instance }} недоступен"
+          description: "Prometheus не может собрать метрики с {{ $labels.instance }} более 30 секунд"
+
+      # Доля 5xx ответов выше 5% за последние 5 минут
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m])) * 100 > 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Error rate выше 5%"
+          description: "Текущий error rate: {{ $value | printf \"%.1f\" }}%"
+
+      # p95 времени ответа выше 1 секунды
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 1.0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency выше 1 секунды"

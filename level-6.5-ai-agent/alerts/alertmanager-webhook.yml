@@ -1,7 +1,8 @@
 # Фрагмент конфигурации Alertmanager для отправки вебхуков AI-агенту.
 #
-# Добавь этот receiver в level-6-monitoring/alertmanager/alertmanager.yml
-# и подключи его к нужным маршрутам.
+# Alertmanager уже установлен в стеке уровня 6 с базовым конфигом
+# (level-6-monitoring/alertmanager/alertmanager.yml — route + receiver-заглушка).
+# Добавь туда receiver ai-agent и маршруты из этого файла.
 #
 # ВАЖНО: agent:8080 доступен внутри Docker-сети level-6-monitoring_default.
 # Убедись что ai-agent подключён к этой сети (см. docker-compose.yml уровня 6.5).
@@ -41,27 +42,5 @@ receivers:
           # bearer_token: <secret>
           # или basic_auth: {username: ..., password: ...}
 
-# ── Пример создания alertmanager.yml с нуля ────────────────────────────────────
-#
-# Если в level-6-monitoring ещё нет Alertmanager:
-#
-# 1. Добавь в level-6-monitoring/docker-compose.yml:
-#
-#   alertmanager:
-#     image: prom/alertmanager:v0.27.0
-#     container_name: alertmanager
-#     volumes:
-#       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
-#     command:
-#       - '--config.file=/etc/alertmanager/alertmanager.yml'
-#     ports:
-#       - "9093:9093"
-#
-# 2. Добавь в level-6-monitoring/prometheus/prometheus.yml:
-#
-#   alerting:
-#     alertmanagers:
-#       - static_configs:
-#           - targets: ['alertmanager:9093']
-#
-# 3. Скопируй этот файл как level-6-monitoring/alertmanager/alertmanager.yml
+# Сервис alertmanager в docker-compose, монтирование конфига и секция alerting
+# в prometheus.yml — всё это уже сделано в level-6-monitoring (см. README уровня 6, Шаг 8).

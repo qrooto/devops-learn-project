@@ -94,6 +94,7 @@ backend_1     8000
 backend_2     8000
 backend_3     8000
 prometheus    0.0.0.0:9090->9090/tcp
+alertmanager  0.0.0.0:9093->9093/tcp
 grafana       0.0.0.0:3000->3000/tcp
 cadvisor      0.0.0.0:8080->8080/tcp
 loki          3100
@@ -414,67 +415,36 @@ tempo:
 
 ---
 
-## Шаг 8 — Написать алерт в Prometheus
+## Шаг 8 — Алерты: Prometheus + Alertmanager
+
+Алертинг состоит из двух ролей:
+- **Prometheus** вычисляет алерты — правила лежат в `prometheus/alerts.yml` (BackendDown, HighErrorRate, HighLatency)
+- **Alertmanager** доставляет их — группирует, подавляет дубликаты, шлёт получателям; конфиг в `alertmanager/alertmanager.yml`
+
+Оба уже подключены в `docker-compose.yml` (сервис `alertmanager`, порт 9093) и в `prometheus.yml` (секции `rule_files` и `alerting`). Открой все три файла и разбери каждую строку — комментарии внутри.
 
 ```bash
-# Создать файл с правилами алертов:
-cat > level-6-monitoring/prometheus/alerts.yml << 'EOF'
-groups:
-  - name: bulletin-board
-    rules:
-      - alert: HighErrorRate
-        expr: |
-          sum(rate(http_requests_total{status_code=~"5.."}[5m]))
-          /
-          sum(rate(http_requests_total[5m])) * 100 > 5
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Error rate выше 5%"
-          description: "Текущий error rate: {{ $value | printf \"%.1f\" }}%"
+# Убедись что всё поднялось:
+docker compose up -d
+curl -s localhost:9093/-/healthy   # Alertmanager отвечает
 
-      - alert: HighLatency
-        expr: |
-          histogram_quantile(0.95,
-            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
-          ) > 1.0
-        for: 2m
-        labels:
-          severity: warning
-        annotations:
-          summary: "p95 latency выше 1 секунды"
-
-      - alert: BackendDown
-        expr: up{job=~"backend.*"} == 0
-        for: 30s
-        labels:
-          severity: critical
-        annotations:
-          summary: "Бэкенд {{ $labels.job }} недоступен"
-EOF
-```
-
-Добавь в `prometheus/prometheus.yml`:
-```yaml
-rule_files:
-  - /etc/prometheus/alerts.yml
-```
-
-```bash
-docker compose restart prometheus
-
-# Посмотреть алерты:
+# Алерты в Prometheus (состояния: inactive / pending / firing):
 # http://localhost:9090/alerts
+# Что дошло до Alertmanager:
+# http://localhost:9093
 ```
 
 **Симулируй алерт:**
 ```bash
 docker compose stop backend_1 backend_2 backend_3
-# Подожди 30 секунд — алерт BackendDown должен перейти в Firing
-# http://localhost:9090/alerts
+# Подожди 30 секунд — алерт BackendDown: pending → firing
+# http://localhost:9090/alerts  → firing
+# http://localhost:9093         → алерт доехал до Alertmanager
 docker compose start backend_1 backend_2 backend_3
+# Ещё через минуту алерт погаснет (resolved)
 ```
+
+Пока receiver в Alertmanager — заглушка (`default` без каналов): алерты видны в UI, но никуда не отправляются. Реальные каналы — Шаг 9 (Telegram) и уровень 6.5 (webhook AI-агенту).
 
 ---
 
@@ -487,24 +457,24 @@ docker compose start backend_1 backend_2 backend_3
 # 3. Напиши боту любое сообщение
 # 4. Получи chat_id:
 #    curl https://api.telegram.org/bot<TOKEN>/getUpdates
-
-# Добавь Alertmanager в docker-compose.yml:
-# image: prom/alertmanager
-# volumes:
-#   - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
 ```
 
+Alertmanager уже запущен — добавь receiver в `alertmanager/alertmanager.yml`:
+
 ```yaml
-# alertmanager/alertmanager.yml:
 route:
-  receiver: telegram
+  receiver: telegram   # было: default
 
 receivers:
   - name: telegram
     telegram_configs:
-      - bot_token: "ВАШ_BOT_TOKEN"
+      - bot_token: "ВАШ_BOT_TOKEN"   # 🔒 секрет! не коммить в Git (см. Security Block)
         chat_id: ВАШ_CHAT_ID
         message: "{{ range .Alerts }}{{ .Annotations.summary }}\n{{ end }}"
+```
+
+```bash
+docker compose restart alertmanager
 ```
 
 ---

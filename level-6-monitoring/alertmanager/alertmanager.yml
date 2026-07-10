@@ -1,0 +1,27 @@
+# Alertmanager — принимает алерты от Prometheus и маршрутизирует их:
+# группирует, подавляет дубликаты, доставляет получателям (Telegram, Slack, webhook).
+#
+# Разделение ролей:
+#   Prometheus  — ВЫЧИСЛЯЕТ алерты (правила в prometheus/alerts.yml)
+#   Alertmanager — ДОСТАВЛЯЕТ их людям и системам
+#
+# Базовый конфиг: маршрут есть, получатель-заглушка. Куда подключать реальные каналы:
+#   - Telegram — README уровня 6, Шаг 9
+#   - AI-агент (webhook) — level-6.5-ai-agent
+
+global:
+  resolve_timeout: 5m   # через сколько считать алерт resolved если он перестал приходить
+
+route:
+  receiver: default
+  group_by: [alertname, job]   # алерты с одинаковыми label-ами склеиваются в одно уведомление
+  group_wait: 30s              # ждём 30 сек — вдруг придут ещё алерты той же группы
+  group_interval: 5m           # не слать обновления группы чаще раза в 5 минут
+  repeat_interval: 4h          # напомнить о всё ещё горящем алерте через 4 часа
+
+receivers:
+  - name: default
+    # Заглушка: алерты видны в UI (http://localhost:9093), но никуда не отправляются.
+    # Сюда добавляются telegram_configs / webhook_configs / slack_configs.
+    # 🔒 Security: bot_token и прочие ключи — секреты, им не место в Git
+    # (см. level-8.5-secrets); подставляй из переменных окружения или отдельного файла.

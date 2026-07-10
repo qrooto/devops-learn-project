@@ -245,20 +245,9 @@ ssh -N -R 8080:localhost:8080 user@vps-ip &
 
 ## Шаг 5 — Настроить Alertmanager webhook
 
-Если в level-6 ещё нет Alertmanager, добавь его.
+Alertmanager уже есть в стеке уровня 6 (`docker-compose.yml`, конфиг `alertmanager/alertmanager.yml`, связка с Prometheus через `alerting:` в `prometheus.yml`) — устанавливать ничего не нужно. Осталось добавить receiver для агента.
 
-**Добавь в `level-6-monitoring/docker-compose.yml`:**
-```yaml
-alertmanager:
-  image: prom/alertmanager:v0.27.0
-  container_name: alertmanager
-  volumes:
-    - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
-  ports:
-    - "9093:9093"
-```
-
-**Создай `level-6-monitoring/alertmanager/alertmanager.yml`** (скопируй из `alerts/alertmanager-webhook.yml` в этой папке — там полный файл с комментариями).
+**Добавь в `level-6-monitoring/alertmanager/alertmanager.yml`** маршруты и receiver `ai-agent` — полный пример с комментариями лежит в `alerts/alertmanager-webhook.yml` этой папки.
 
 ⚠️ **Важно поменять при копировании:** в шаблоне `url: 'http://ai-agent:8080/webhook'` — это docker DNS-имя из старой схемы, где агент жил в одной сети с Alertmanager. Теперь агент на локальной машине, замени на адрес локальной машины внутри туннеля:
 ```yaml
@@ -268,14 +257,6 @@ receivers:
       - url: 'http://10.8.0.2:8080/webhook'   # 10.8.0.2 — локальная машина в WireGuard-туннеле
 ```
 Это и есть то самое обратное направление трафика (VPS → локальная машина) из Шага 4 — убедись что туннель поднят и агент слушает `:8080` ДО того как Alertmanager попробует достучаться.
-
-**Добавь в `level-6-monitoring/prometheus/prometheus.yml`:**
-```yaml
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets: ['alertmanager:9093']
-```
 
 **Перезапусти level-6 стек (на VPS, по SSH):**
 ```bash

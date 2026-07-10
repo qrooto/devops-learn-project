@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DevOps-учебник — Доска объявлений</title>
+<style>
+  :root {
+    --bg: #0b0e14; --bg-card: #12161f; --bg-chip: #1a2029;
+    --border: #232a36; --border-soft: #1c222d;
+    --text: #d7dde6; --muted: #8b95a5; --dim: #5c6674;
+    --cyan: #22d3ee; --emerald: #34d399; --amber: #fbbf24; --rose: #fb7185; --violet: #a78bfa;
+    --link: #67e8f9;
+  }
+  [data-theme="light"] {
+    --bg: #f6f7f9; --bg-card: #ffffff; --bg-chip: #eef1f5;
+    --border: #d8dee7; --border-soft: #e5eaf0;
+    --text: #1f2733; --muted: #5b6675; --dim: #8a94a3;
+    --cyan: #0891b2; --emerald: #059669; --amber: #b45309; --rose: #be123c; --violet: #7c3aed;
+    --link: #0e7490;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 14px; line-height: 1.55; padding: 32px 20px 80px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: .2px; }
+  .subtitle { color: var(--muted); font-size: 12.5px; margin-top: 6px; max-width: 640px; }
+  #themeBtn {
+    background: var(--bg-chip); color: var(--muted); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 12px; cursor: pointer; flex-shrink: 0;
+  }
+  #themeBtn:hover { color: var(--text); }
+
+  .howto {
+    border: 1px dashed var(--border); border-radius: 10px; padding: 14px 16px;
+    color: var(--muted); font-size: 12.5px; margin: 22px 0 30px;
+  }
+  .howto b { color: var(--text); }
+  .howto .h { color: var(--rose); } .howto .r { color: var(--emerald); }
+
+  /* карта курса */
+  .era { margin-bottom: 10px; }
+  .era-label { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); margin: 18px 0 8px; }
+  .era-label .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    display: inline-flex; align-items: baseline; gap: 8px;
+    background: var(--bg-chip); border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 12px; font-size: 12.5px; color: var(--text); transition: border-color .15s;
+  }
+  .chip:hover { border-color: var(--cyan); text-decoration: none; }
+  .chip .n { color: var(--cyan); font-weight: 700; }
+  .chip .t { color: var(--muted); }
+
+  .map-links { margin: 20px 0 40px; font-size: 12.5px; color: var(--muted); }
+
+  /* карточки уровней */
+  section.level { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); padding: 20px 22px; margin-bottom: 18px; scroll-margin-top: 20px; }
+  .lvl-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .lvl-num { font-size: 22px; font-weight: 700; color: var(--cyan); }
+  .lvl-title { font-size: 15px; font-weight: 700; }
+  .lvl-dir { font-size: 11px; color: var(--dim); margin-left: auto; }
+  .lvl-stack { font-size: 11.5px; color: var(--violet); margin-top: 6px; }
+  .ps { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+  @media (max-width: 640px) { .ps { grid-template-columns: 1fr; } header { flex-direction: column; } }
+  .pain, .sol { border-radius: 8px; padding: 10px 12px; font-size: 12.5px; border: 1px solid var(--border-soft); }
+  .pain { border-left: 3px solid var(--rose); color: var(--muted); }
+  .sol  { border-left: 3px solid var(--emerald); color: var(--muted); }
+  .pain b { color: var(--rose); font-size: 11px; letter-spacing: .5px; }
+  .sol b { color: var(--emerald); font-size: 11px; letter-spacing: .5px; }
+  .diagrams { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .dg {
+    font-size: 11.5px; padding: 5px 10px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg-chip); color: var(--link);
+  }
+  .dg:hover { border-color: var(--cyan); text-decoration: none; }
+  .dg .k { color: var(--dim); margin-right: 6px; }
+
+  /* теория */
+  .theory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-top: 14px; }
+  .th {
+    border: 1px solid var(--border); background: var(--bg-card); border-radius: 10px;
+    padding: 12px 14px; font-size: 12.5px; color: var(--text);
+  }
+  .th:hover { border-color: var(--cyan); text-decoration: none; }
+  .th .num { color: var(--dim); font-size: 11px; }
+  .th .desc { color: var(--muted); font-size: 11.5px; margin-top: 4px; display: block; }
+
+  h2 { font-size: 15px; margin: 44px 0 6px; scroll-margin-top: 20px; }
+  h2 + .sec-sub { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
+  footer { margin-top: 56px; color: var(--dim); font-size: 11.5px; border-top: 1px solid var(--border-soft); padding-top: 16px; }
+  .top { font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <h1>DevOps-учебник: доска объявлений</h1>
+    <div class="subtitle">15 уровней от одного контейнера до self-healing production-стека. Каждый уровень решает боль, которую создал предыдущий: строим → ломаем → наблюдаем → чиним.</div>
+  </div>
+  <button id="themeBtn">☾ / ☀</button>
+</header>
+
+<div class="howto">
+  <b>Как пользоваться.</b> Эта страница — карта курса со всеми схемами. Кликай уровень → читай «боль → решение» → открывай диаграммы (каждая — со своей темой и экспортом в PNG/SVG). Команды и полные шаги — в <b>README</b> внутри папки уровня в репозитории. Разметка: <span class="h">[голова]</span> — концепция, боль→решение, теория: читается с телефона в дороге; <span class="r">[руки]</span> — README уровня и практика: нужна VM.
+</div>
+
+<div class="era">
+  <div class="era-label"><span class="dot" style="background:var(--cyan)"></span>Эра 1 — Основы</div>
+  <div class="chips">
+    <a class="chip" href="#l0"><span class="n">0</span> VPS Hardening <span class="t">ssh, firewall</span></a>
+    <a class="chip" href="#l1"><span class="n">1</span> Monolith <span class="t">docker compose</span></a>
+    <a class="chip" href="#l2"><span class="n">2</span> Scaling <span class="t">3× backend</span></a>
+    <a class="chip" href="#l3"><span class="n">3</span> Caching <span class="t">redis</span></a>
+    <a class="chip" href="#l35"><span class="n">3.5</span> HTTPS <span class="t">traefik, tls</span></a>
+  </div>
+</div>
+<div class="era">
+  <div class="era-label"><span class="dot" style="background:var(--emerald)"></span>Эра 2 — Автоматизация доставки</div>
+  <div class="chips">
+    <a class="chip" href="#l4"><span class="n">4</span> CI/CD <span class="t">gitlab ce</span></a>
+  </div>
+</div>
+<div class="era">
+  <div class="era-label"><span class="dot" style="background:var(--violet)"></span>Эра 3 — Оркестрация и наблюдаемость</div>
+  <div class="chips">
+    <a class="chip" href="#l5"><span class="n">5</span> Kubernetes <span class="t">minikube</span></a>
+    <a class="chip" href="#l55"><span class="n">5.5</span> Ingress <span class="t">cert-manager</span></a>
+    <a class="chip" href="#l6"><span class="n">6</span> Monitoring <span class="t">prometheus</span></a>
+    <a class="chip" href="#l65"><span class="n">6.5</span> AI Agent <span class="t">claude api</span></a>
+    <a class="chip" href="#l7"><span class="n">7</span> Helm <span class="t">blue-green</span></a>
+  </div>
+</div>
+<div class="era">
+  <div class="era-label"><span class="dot" style="background:var(--amber)"></span>Эра 4 — Production-grade управление</div>
+  <div class="chips">
+    <a class="chip" href="#l8"><span class="n">8</span> GitOps <span class="t">argocd</span></a>
+    <a class="chip" href="#l85"><span class="n">8.5</span> Secrets <span class="t">kubeseal</span></a>
+    <a class="chip" href="#l9"><span class="n">9</span> Terraform <span class="t">iac</span></a>
+    <a class="chip" href="#l10"><span class="n">10</span> Ansible <span class="t">fleet</span></a>
+  </div>
+</div>
+
+<div class="map-links">
+  ⤷ <a href="architecture/00-overview.html">Мета-схема: вся эволюция за 30 секунд</a> · <a href="#theory">Теория сетей (10 схем)</a>
+</div>
+
+<!-- ЭРА 1 -->
+<section class="level" id="l0">
+  <div class="lvl-head"><span class="lvl-num">0</span><span class="lvl-title">Настройка VPS</span><span class="lvl-dir">level-0-vps-setup/</span></div>
+  <div class="lvl-stack">ssh-ключи · ufw · fail2ban · unattended-upgrades</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Свежий сервер с root-паролём — боты начинают брутфорс через минуты после появления IP в сети.</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>Ключи вместо паролей, Default Deny на firewall, непривилегированный пользователь, fail2ban.</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-0-vps-setup/concept.html"><span class="k">концепция</span>слои защиты</a>
+    <a class="dg" href="architecture/level-0-vps-setup/implementation.html"><span class="k">реализация</span>реальный hardening</a>
+    <a class="dg" href="architecture/level-0-vps-setup/network.html"><span class="k">сеть</span>путь SSH-подключения</a>
+  </div>
+</section>
+
+<section class="level" id="l1">
+  <div class="lvl-head"><span class="lvl-num">1</span><span class="lvl-title">Монолит</span><span class="lvl-dir">level-1-monolith/</span></div>
+  <div class="lvl-stack">docker compose · nginx · fastapi · postgresql · jwt · alembic</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Ничего нет. Стартуем с самой простой рабочей конфигурации — и ломаем её нагрузкой (k6), чтобы почувствовать пределы.</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>Первый живой сервис: статика через nginx, API, база с миграциями, авторизация. Плюс бэкап с restore drill.</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-1-monolith/concept.html"><span class="k">концепция</span>3-tier</a>
+    <a class="dg" href="architecture/level-1-monolith/implementation.html"><span class="k">реализация</span>реальный compose</a>
+    <a class="dg" href="architecture/level-1-monolith/network.html"><span class="k">сеть</span>путь запроса</a>
+  </div>
+</section>
+
+<section class="level" id="l2">
+  <div class="lvl-head"><span class="lvl-num">2</span><span class="lvl-title">Горизонтальное масштабирование</span><span class="lvl-dir">level-2-scaling/</span></div>
+  <div class="lvl-stack">nginx upstream · 3× backend · least_conn</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Один бэкенд задыхается под нагрузкой: latency растёт, появляются ошибки.</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>3 инстанса за балансировщиком + stateless-архитектура (JWT) — убийство контейнера под нагрузкой переживается без потерь.</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-2-scaling/pain-solution.html"><span class="k">боль→решение</span></a>
+    <a class="dg" href="architecture/level-2-scaling/concept.html"><span class="k">концепция</span>балансировка</a>
+    <a class="dg" href="architecture/level-2-scaling/implementation.html"><span class="k">реализация</span>upstream</a>
+    <a class="dg" href="architecture/level-2-scaling/network.html"><span class="k">сеть</span></a>
+  </div>
+</section>
+
+<section class="level" id="l3">
+  <div class="lvl-head"><span class="lvl-num">3</span><span class="lvl-title">Кэширование</span><span class="lvl-dir">level-3-caching/</span></div>
+  <div class="lvl-stack">redis · cache hit/miss · инвалидация · индексы</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Три бэкенда упираются в одну базу: одинаковые SELECT-ы молотят PostgreSQL на каждый запрос.</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>Redis перед базой: HIT — миллисекунды, MISS — идём в базу и кладём в кэш; инвалидация при записи.</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-3-caching/pain-solution.html"><span class="k">боль→решение</span></a>
+    <a class="dg" href="architecture/level-3-caching/concept.html"><span class="k">концепция</span>cache-aside</a>
+    <a class="dg" href="architecture/level-3-caching/implementation.html"><span class="k">реализация</span></a>
+  </div>
+</section>
+
+<section class="level" id="l35">
+  <div class="lvl-head"><span class="lvl-num">3.5</span><span class="lvl-title">HTTPS</span><span class="lvl-dir">level-3.5-https/</span></div>
+  <div class="lvl-stack">traefik · let's encrypt · acme · redirect http→https</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Всё ходит по HTTP: пароли и JWT видны любому на пути (Wi-Fi, провайдер).</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>Traefik на границе терминирует TLS и сам получает/продлевает сертификаты Let's Encrypt.</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-3.5-https/pain-solution.html"><span class="k">боль→решение</span></a>
+    <a class="dg" href="architecture/level-3.5-https/concept.html"><span class="k">концепция</span>tls на границе</a>
+    <a class="dg" href="architecture/level-3.5-https/implementation.html"><span class="k">реализация</span>traefik</a>
+    <a class="dg" href="architecture/level-3.5-https/network.html"><span class="k">сеть</span></a>
+  </div>
+</section>
+
+<!-- ЭРА 2 -->
+<section class="level" id="l4">
+  <div class="lvl-head"><span class="lvl-num">4</span><span class="lvl-title">CI/CD</span><span class="lvl-dir">level-4-gitlab/ (+ level-4-cicd/ — GitHub Actions)</span></div>
+  <div class="lvl-stack">gitlab ce · runner · registry · rules · trivy · hadolint</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Деплой руками: ssh, git pull, docker restart — сервис падает на время деплоя, шаги забываются.</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>Pipeline: тесты → сборка образа (тег = git SHA) → скан уязвимостей → rolling deploy по кнопке.</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-4-gitlab/pain-solution.html"><span class="k">боль→решение</span></a>
+    <a class="dg" href="architecture/level-4-gitlab/concept.html"><span class="k">концепция</span>pipeline</a>
+    <a class="dg" href="architecture/level-4-gitlab/implementation.html"><span class="k">реализация</span>.gitlab-ci.yml</a>
+    <a class="dg" href="architecture/level-4-gitlab/network.html"><span class="k">сеть</span></a>
+  </div>
+</section>
+
+<!-- ЭРА 3 -->
+<section class="level" id="l5">
+  <div class="lvl-head"><span class="lvl-num">5</span><span class="lvl-title">Kubernetes</span><span class="lvl-dir">level-5-kubernetes/</span></div>
+  <div class="lvl-stack">minikube · deployment · service · probes · hpa · blue-green · canary</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Compose не перезапускает упавшие контейнеры, не масштабирует под нагрузкой, не переживает ребут сервера.</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>Декларируешь желаемое состояние — reconciliation loop сам чинит и масштабирует (self-healing, HPA).</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-5-kubernetes/pain-solution.html"><span class="k">боль→решение</span></a>
+    <a class="dg" href="architecture/level-5-kubernetes/concept.html"><span class="k">концепция</span>желаемое состояние</a>
+    <a class="dg" href="architecture/level-5-kubernetes/implementation.html"><span class="k">реализация</span>манифесты</a>
+    <a class="dg" href="architecture/level-5-kubernetes/network.html"><span class="k">сеть</span>nodeport→pod</a>
+  </div>
+</section>
+
+<section class="level" id="l55">
+  <div class="lvl-head"><span class="lvl-num">5.5</span><span class="lvl-title">Ingress и cert-manager</span><span class="lvl-dir">level-5.5-ingress/</span></div>
+  <div class="lvl-stack">ingress-nginx · clusterip · cert-manager · acme · clusterissuer</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Наружу торчит NodePort :30080 — нестандартный порт, без TLS, по порту на каждый будущий сервис.</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>Единый вход :80/:443 с маршрутизацией по Host; cert-manager сам выпускает и продлевает сертификаты.</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-5.5-ingress/pain-solution.html"><span class="k">боль→решение</span></a>
+    <a class="dg" href="architecture/level-5.5-ingress/concept.html"><span class="k">концепция</span>правила vs контроллер</a>
+    <a class="dg" href="architecture/level-5.5-ingress/network.html"><span class="k">сеть</span>путь через ingress</a>
+    <a class="dg" href="architecture/networking-theory/10-acme-challenge.html"><span class="k">теория</span>acme http-01</a>
+  </div>
+</section>
+
+<section class="level" id="l6">
+  <div class="lvl-head"><span class="lvl-num">6</span><span class="lvl-title">Observability</span><span class="lvl-dir">level-6-monitoring/</span></div>
+  <div class="lvl-stack">prometheus · alertmanager · grafana · loki · promtail · cadvisor</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Инцидент — а ты слепой: не видно RPS, latency, ошибок; логи размазаны по контейнерам.</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>Метрики (Prometheus) + дашборды (Grafana) + централизованные логи (Loki) + алерты (Alertmanager).</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-6-monitoring/pain-solution.html"><span class="k">боль→решение</span></a>
+    <a class="dg" href="architecture/level-6-monitoring/concept.html"><span class="k">концепция</span>3 столпа</a>
+    <a class="dg" href="architecture/level-6-monitoring/implementation.html"><span class="k">реализация</span>стек в compose</a>
+    <a class="dg" href="architecture/level-6-monitoring/network.html"><span class="k">сеть</span></a>
+  </div>
+</section>
+
+<section class="level" id="l65">
+  <div class="lvl-head"><span class="lvl-num">6.5</span><span class="lvl-title">AI-агент диагностики</span><span class="lvl-dir">level-6.5-ai-agent/</span></div>
+  <div class="lvl-stack">python · claude api · alertmanager webhook · telegram · wireguard</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Алерт в 3 ночи: 50 000 строк логов, гипотезы, 30 минут до причины — вручную.</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>Webhook от Alertmanager → агент сам собирает логи и метрики → LLM объясняет и предлагает действие (approve/reject в Telegram).</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-6.5-ai-agent/pain-solution.html"><span class="k">боль→решение</span></a>
+    <a class="dg" href="architecture/level-6.5-ai-agent/concept.html"><span class="k">концепция</span>агент в контуре</a>
+    <a class="dg" href="architecture/level-6.5-ai-agent/implementation.html"><span class="k">реализация</span>sequence</a>
+    <a class="dg" href="architecture/level-6.5-ai-agent/network.html"><span class="k">сеть</span>vpn + egress</a>
+  </div>
+</section>
+
+<section class="level" id="l7">
+  <div class="lvl-head"><span class="lvl-num">7</span><span class="lvl-title">Helm</span><span class="lvl-dir">level-7-helm/</span></div>
+  <div class="lvl-stack">chart · values · required · rollback · blue-green · canary</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Деплой — десяток kubectl apply по очереди; «что именно было задеплоено вчера?» — неизвестно.</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>Один чарт = весь стек одной командой; история ревизий, rollback, разные values для dev/prod.</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-7-helm/pain-solution.html"><span class="k">боль→решение</span></a>
+    <a class="dg" href="architecture/level-7-helm/concept.html"><span class="k">концепция</span>blue-green</a>
+    <a class="dg" href="architecture/level-7-helm/implementation.html"><span class="k">реализация</span>чарт</a>
+  </div>
+</section>
+
+<!-- ЭРА 4 -->
+<section class="level" id="l8">
+  <div class="lvl-head"><span class="lvl-num">8</span><span class="lvl-title">GitOps</span><span class="lvl-dir">level-8-gitops/</span></div>
+  <div class="lvl-stack">argocd · selfheal · prune · drift detection · immutable tags</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Кто-то поправил кластер руками — Git и реальность разошлись, никто не заметил (drift).</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>Git — единственный источник правды: ArgoCD непрерывно сверяет кластер с репо и откатывает самодеятельность.</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-8-gitops/pain-solution.html"><span class="k">боль→решение</span></a>
+    <a class="dg" href="architecture/level-8-gitops/concept.html"><span class="k">концепция</span>push vs pull</a>
+    <a class="dg" href="architecture/level-8-gitops/implementation.html"><span class="k">реализация</span>application + :latest ловушка</a>
+  </div>
+</section>
+
+<section class="level" id="l85">
+  <div class="lvl-head"><span class="lvl-num">8.5</span><span class="lvl-title">Секреты в GitOps</span><span class="lvl-dir">level-8.5-secrets/</span></div>
+  <div class="lvl-stack">sealed secrets · kubeseal · sops/age · external secrets (обзор)</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>GitOps требует всё состояние в Git — но secret.yml в Git это утечка, а base64 не шифрование.</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>В Git — шифротекст (SealedSecret); расшифровать может только контроллер с приватным ключом внутри кластера.</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-8.5-secrets/pain-solution.html"><span class="k">боль→решение</span></a>
+    <a class="dg" href="architecture/level-8.5-secrets/concept.html"><span class="k">концепция</span>путь секрета</a>
+  </div>
+</section>
+
+<section class="level" id="l9">
+  <div class="lvl-head"><span class="lvl-num">9</span><span class="lvl-title">Terraform</span><span class="lvl-dir">level-9-terraform/</span></div>
+  <div class="lvl-stack">hcl · state · plan/apply · variables · environments</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Инфраструктура создана кликами и руками — staging «такой же, но немного другой», воспроизвести нельзя.</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>Инфраструктура как код: описал в .tf → plan показывает diff → apply приводит к состоянию. Идемпотентно.</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-9-terraform/pain-solution.html"><span class="k">боль→решение</span></a>
+    <a class="dg" href="architecture/level-9-terraform/concept.html"><span class="k">концепция</span>state</a>
+    <a class="dg" href="architecture/level-9-terraform/implementation.html"><span class="k">реализация</span></a>
+  </div>
+</section>
+
+<section class="level" id="l10">
+  <div class="lvl-head"><span class="lvl-num">10</span><span class="lvl-title">Ansible</span><span class="lvl-dir">level-10-ansible/</span></div>
+  <div class="lvl-stack">inventory · playbooks · roles · handlers · vault</div>
+  <div class="ps">
+    <div class="pain"><b>БОЛЬ</b><br>Terraform создал 10 VM — а настраивать каждую (пакеты, конфиги, сервисы) опять руками?</div>
+    <div class="sol"><b>РЕШЕНИЕ</b><br>Плейбуки по SSH на весь парк сразу: идемпотентные task-и, роли, handlers, секреты в Vault.</div>
+  </div>
+  <div class="diagrams">
+    <a class="dg" href="architecture/level-10-ansible/pain-solution.html"><span class="k">боль→решение</span></a>
+    <a class="dg" href="architecture/level-10-ansible/concept.html"><span class="k">концепция</span>push по ssh</a>
+    <a class="dg" href="architecture/level-10-ansible/implementation.html"><span class="k">реализация</span>плейбук</a>
+    <a class="dg" href="architecture/level-10-ansible/network.html"><span class="k">сеть</span>fan-out</a>
+  </div>
+</section>
+
+<h2 id="theory">Теория сетей — отдельно от проекта</h2>
+<div class="sec-sub">Фундамент, который пригодится и за пределами курса. Каждая схема самодостаточна — [голова], идеально для дороги.</div>
+<div class="theory-grid">
+  <a class="th" href="architecture/networking-theory/01-ports-and-sockets.html"><span class="num">01</span> Порты и сокеты<span class="desc">что значит «сервис слушает :8000»</span></a>
+  <a class="th" href="architecture/networking-theory/02-tcp-handshake-and-firewall.html"><span class="num">02</span> TCP handshake и firewall<span class="desc">SYN/ACK и где режет Default Deny</span></a>
+  <a class="th" href="architecture/networking-theory/03-http-anatomy.html"><span class="num">03</span> Анатомия HTTP<span class="desc">запрос/ответ, заголовки, коды</span></a>
+  <a class="th" href="architecture/networking-theory/04-docker-bridge-networking.html"><span class="num">04</span> Docker bridge-сети<span class="desc">DNS по имени контейнера, изоляция</span></a>
+  <a class="th" href="architecture/networking-theory/05-load-balancing-algorithms.html"><span class="num">05</span> Алгоритмы балансировки<span class="desc">round-robin, least_conn, health</span></a>
+  <a class="th" href="architecture/networking-theory/06-tls-handshake.html"><span class="num">06</span> TLS 1.3 handshake<span class="desc">что происходит до первого байта</span></a>
+  <a class="th" href="architecture/networking-theory/07-kubernetes-networking.html"><span class="num">07</span> Сети Kubernetes<span class="desc">ClusterIP vs NodePort vs LB, DNS</span></a>
+  <a class="th" href="architecture/networking-theory/08-webhooks-and-egress.html"><span class="num">08</span> Webhooks и egress<span class="desc">кто кого вызывает и куда смотрит firewall</span></a>
+  <a class="th" href="architecture/networking-theory/09-ssh-fanout.html"><span class="num">09</span> SSH fan-out<span class="desc">как Ansible говорит с парком машин</span></a>
+  <a class="th" href="architecture/networking-theory/10-acme-challenge.html"><span class="num">10</span> ACME HTTP-01<span class="desc">как Let's Encrypt проверяет домен</span></a>
+</div>
+
+<footer>
+  Диаграммы: самодостаточный HTML (тема + экспорт PNG/SVG встроены). Локально: открой <code>docs/index.html</code> в браузере. Онлайн: включи GitHub Pages на папку <code>docs/</code> — и учебник доступен с телефона. Практика и команды — в README уровней; дисциплина прохождения — PROGRESS.md и START_HERE.md в корне репозитория. <a class="top" href="#">↑ наверх</a>
+</footer>
+
+</div>
+<script>
+(function(){
+  var KEY='devops-tutorial-theme';
+  var saved=localStorage.getItem(KEY);
+  var prefersLight=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches;
+  function apply(t){ if(t==='light'){document.documentElement.setAttribute('data-theme','light');}else{document.documentElement.removeAttribute('data-theme');} }
+  var theme=saved||(prefersLight?'light':'dark');
+  apply(theme);
+  document.getElementById('themeBtn').addEventListener('click',function(){
+    theme=(theme==='light')?'dark':'light';
+    localStorage.setItem(KEY,theme); apply(theme);
+  });
+})();
+</script>
+</body>
+</html>

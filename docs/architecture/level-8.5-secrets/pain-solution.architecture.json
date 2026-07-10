@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 8 → Level 8.5: боль и решение",
+    "subtitle": "Было: GitOps требует всё в Git, но секрет в Git = утечка → Стало: в Git шифротекст",
+    "output": "pain-solution.html"
+  },
+  "components": [
+    { "id": "gitplain", "type": "database", "label": "secret.yml в Git", "tag": "stringData: пароль открытым текстом", "pos": [60, 140], "size": [220, 84] },
+    { "id": "leak", "type": "external", "label": "Все, у кого есть репо", "tag": "+ история коммитов навсегда", "pos": [360, 140], "size": [200, 84] },
+
+    { "id": "gitsealed", "type": "security", "label": "SealedSecret в Git", "tag": "шифротекст, читать бесполезно", "pos": [60, 420], "size": [220, 84] },
+    { "id": "clusteronly", "type": "cloud", "label": "Контроллер в кластере", "tag": "единственный, кто может расшифровать", "pos": [360, 420], "size": [200, 84] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "ДО — Level 8 (plain Secret в Git)", "wraps": ["gitplain", "leak"] },
+    { "kind": "region", "label": "ПОСЛЕ — Level 8.5 (Sealed Secrets)", "wraps": ["gitsealed", "clusteronly"] }
+  ],
+  "connections": [
+    { "from": "gitplain", "to": "leak", "label": "пароль виден всем", "variant": "security", "labelDy": -46 },
+    { "from": "gitsealed", "to": "clusteronly", "label": "расшифровка только внутри кластера", "variant": "emphasis", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Было", "items": [
+      "ArgoCD деплоит всё из Git — включая secret.yml с паролем открытым текстом; противоречие: GitOps требует всё состояние в Git, безопасность требует секретов в Git не держать"
+    ]},
+    { "dot": "emerald", "title": "Стало", "items": [
+      "kubeseal шифрует секрет публичным ключом кластера → в Git лежит SealedSecret (шифротекст) → контроллер в кластере расшифровывает и создаёт обычный Secret; такой файл можно коммитить даже в публичный репозиторий"
+    ]},
+    { "dot": "amber", "title": "Альтернативы по мере роста", "items": [
+      "SOPS + age — шифрование любых файлов в Git (не только K8s); External Secrets Operator — секреты живут во внешнем хранилище (Vault, cloud Secret Manager), в Git только ссылка. Прогрессия: Sealed Secrets → SOPS → ESO + Vault"
+    ]}
+  ]
+}

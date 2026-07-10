@@ -264,3 +264,15 @@ kubectl logs -n cert-manager deployment/cert-manager | tail -20
 **5. Браузер ругается на сертификат**
 
 Для `selfsigned` и `letsencrypt-staging` это норма — они не в доверенных корнях. Проверяй цепочку явно: `openssl s_client -connect bulletin.local:443 -servername bulletin.local </dev/null | head -20`. «Доверенный» замок даёт только прод Let's Encrypt на публичном домене.
+
+---
+
+## Архитектура
+
+- [Концепция: Ingress в вакууме](../docs/architecture/level-5.5-ingress/concept.html) — ресурс-правила vs контроллер-исполнитель, маршрутизация по Host
+- [Реализация: путь запроса через Ingress](../docs/architecture/level-5.5-ingress/network.html) — один вход :80/:443, TLS-терминация на границе, cert-manager
+- [Боль → решение: Level 5 → Level 5.5](../docs/architecture/level-5.5-ingress/pain-solution.html) — от NodePort на каждый сервис к единой точке входа
+- [Теория: ACME HTTP-01 challenge](../docs/architecture/networking-theory/10-acme-challenge.html) — как Let's Encrypt проверяет владение доменом
+- [Теория: TLS handshake](../docs/architecture/networking-theory/06-tls-handshake.html) — что происходит до первого байта приложения
+
+Диаграммы — самодостаточные `.html` файлы (переключатель темы, экспорт в PNG/SVG в браузере). GitHub покажет только исходный код — открывай файл локально в браузере.

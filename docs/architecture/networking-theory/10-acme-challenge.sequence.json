@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Теория: ACME HTTP-01 challenge",
+    "subtitle": "Как Let's Encrypt проверяет владение доменом перед выдачей сертификата",
+    "output": "10-acme-challenge.html",
+    "viewBox": [860, 620]
+  },
+  "participants": [
+    { "id": "certmgr", "type": "backend", "label": "cert-manager", "sublabel": "в кластере" },
+    { "id": "le", "type": "external", "label": "Let's Encrypt", "sublabel": "ACME API" },
+    { "id": "ingress", "type": "security", "label": "ingress-nginx", "sublabel": ":80 снаружи" }
+  ],
+  "segments": [
+    { "from": 150, "to": 460, "label": "HTTP-01 challenge" },
+    { "from": 480, "to": 545, "label": "Выдача" }
+  ],
+  "messages": [
+    { "from": "certmgr", "to": "le", "y": 190, "label": "order: bulletin.example.com", "variant": "emphasis", "note": "хочу сертификат для этого домена" },
+    { "from": "le", "to": "certmgr", "y": 250, "label": "challenge: токен X", "variant": "return", "note": "докажи владение: отдай X по известному URL" },
+    { "from": "certmgr", "to": "ingress", "y": 310, "label": "маршрут /.well-known/acme-challenge/X", "variant": "default", "note": "временный solver-Pod + правило в Ingress" },
+    { "from": "le", "to": "ingress", "y": 380, "label": "GET /.well-known/acme-challenge/X", "variant": "emphasis", "note": "проверка приходит ИЗ ИНТЕРНЕТА — поэтому нужен публичный домен" },
+    { "from": "ingress", "to": "le", "y": 430, "label": "200: токен X", "variant": "return" },
+    { "from": "le", "to": "certmgr", "y": 510, "label": "сертификат выдан", "variant": "emphasis", "note": "cert-manager кладёт его в Secret, ingress подхватывает" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "Проверка идёт снаружи внутрь: Let's Encrypt должен ДОСТУЧАТЬСЯ до твоего :80 из интернета — вот почему на локальном minikube выдача не пройдёт, а на VPS с публичным DNS пройдёт",
+      "Для отладки — staging-endpoint Let's Encrypt: у продового жёсткие rate-limit-ы (5 неудач в час), можно заблокировать себе выдачу на часы",
+      "Есть альтернатива DNS-01: вместо файла по HTTP — TXT-запись в DNS; работает без публичного :80 и единственный способ получить wildcard-сертификат (*.example.com)"
+    ]},
+    { "dot": "amber", "title": "Где это в проекте", "items": [
+      "Level 3.5 — Traefik проходит этот же флоу сам (certresolver letsencrypt); Level 5.5 — cert-manager с ClusterIssuer letsencrypt-staging делает то же внутри кластера"
+    ]}
+  ]
+}

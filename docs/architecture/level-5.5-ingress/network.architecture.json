@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 5.5 — сетевой путь запроса через Ingress",
+    "subtitle": "Один вход :80/:443 вместо NodePort на каждый сервис; TLS выпускает cert-manager",
+    "output": "network.html"
+  },
+  "components": [
+    { "id": "ingressres", "type": "frontend", "label": "Ingress bulletin-board", "sublabel": "host: bulletin.local", "pos": [230, 120], "size": [200, 84] },
+    { "id": "tlssecret", "type": "security", "label": "Secret bulletin-local-tls", "sublabel": "ключ + сертификат", "pos": [520, 120], "size": [210, 84] },
+    { "id": "certmgr", "type": "cloud", "label": "cert-manager", "tag": "выпускает и продлевает сам", "pos": [810, 120], "size": [180, 84] },
+    { "id": "client", "type": "external", "label": "Клиент", "pos": [20, 340], "size": [130, 84] },
+    { "id": "ctrl", "type": "security", "label": "ingress-nginx", "sublabel": ":80/:443", "tag": "TLS-терминация здесь", "pos": [230, 340], "size": [200, 84] },
+    { "id": "nginxsvc", "type": "cloud", "label": "Service nginx", "sublabel": "ClusterIP (был NodePort)", "pos": [520, 340], "size": [210, 84] },
+    { "id": "nginxpod", "type": "frontend", "label": "Pod nginx", "sublabel": "дальше — как на Level 5", "pos": [810, 340], "size": [180, 84] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Cluster (minikube node)", "wraps": ["ingressres", "tlssecret", "certmgr", "ctrl", "nginxsvc", "nginxpod"] }
+  ],
+  "connections": [
+    { "from": "client", "to": "ctrl", "label": "HTTPS :443", "variant": "emphasis", "labelDy": -46 },
+    { "from": "ctrl", "to": "nginxsvc", "label": "по Host-заголовку", "variant": "emphasis", "labelDy": -46 },
+    { "from": "nginxsvc", "to": "nginxpod", "variant": "emphasis" },
+    { "from": "ingressres", "to": "ctrl", "label": "правила", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelAt": [330, 218] },
+    { "from": "certmgr", "to": "tlssecret", "label": "выпускает", "variant": "default", "fromSide": "left", "toSide": "right" },
+    { "from": "tlssecret", "to": "ctrl", "label": "TLS", "variant": "dashed", "fromSide": "left", "toSide": "top", "route": "orthogonal-h" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "Снаружи доступен ТОЛЬКО контроллер: nginx-сервис стал ClusterIP, порт 30080 закрыт — поверхность атаки не растёт с числом сервисов",
+      "TLS расшифровывается на границе (контроллер), внутрь кластера трафик идёт уже HTTP — приложению не нужно знать про сертификаты вообще",
+      "cert-manager увидел аннотацию cluster-issuer на Ingress → сам выпустил сертификат в Secret → контроллер его подхватил; продление тоже автоматическое"
+    ]},
+    { "dot": "amber", "title": "Три разных симптома поломки", "items": [
+      "404 от nginx — Host в запросе не совпал с правилами; пустой ADDRESS — нет ingressClassName, никто не взял Ingress в работу; 503 — Service/endpoints не найдены"
+    ]},
+    { "dot": "cyan", "title": "Теория глубже", "items": [
+      "../networking-theory/10-acme-challenge.html — как Let's Encrypt проверяет владение доменом (HTTP-01)",
+      "../networking-theory/06-tls-handshake.html — что происходит при TLS-рукопожатии"
+    ]}
+  ]
+}

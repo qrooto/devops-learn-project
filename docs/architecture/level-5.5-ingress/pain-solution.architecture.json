@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Level 5 → Level 5.5: боль и решение",
+    "subtitle": "Было: NodePort на каждый сервис, без TLS → Стало: один вход :80/:443 + авто-сертификаты",
+    "output": "pain-solution.html"
+  },
+  "components": [
+    { "id": "np1", "type": "backend", "label": "nginx NodePort :30080", "tag": "нестандартный порт, HTTP", "pos": [60, 140], "size": [220, 84] },
+    { "id": "np2", "type": "backend", "label": "след. сервис :30081...", "tag": "+ порт на КАЖДЫЙ сервис", "pos": [340, 140], "size": [210, 84] },
+
+    { "id": "ingress_a", "type": "security", "label": "Ingress :80/:443", "tag": "маршрутизация по Host/path", "pos": [60, 420], "size": [200, 84] },
+    { "id": "certmgr_a", "type": "cloud", "label": "cert-manager", "tag": "TLS выпускается и продлевается сам", "pos": [340, 420], "size": [210, 84] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "ДО — Level 5 (NodePort)", "wraps": ["np1", "np2"] },
+    { "kind": "region", "label": "ПОСЛЕ — Level 5.5 (Ingress)", "wraps": ["ingress_a", "certmgr_a"] }
+  ],
+  "connections": [
+    { "from": "np1", "to": "np2", "label": "порты копятся, TLS нигде", "variant": "security", "labelDy": -46 },
+    { "from": "ingress_a", "to": "certmgr_a", "label": "один вход + автоматический HTTPS", "variant": "emphasis", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Было", "items": [
+      "Каждому сервису — свой NodePort из диапазона 30000-32767: пользователи ходят на нестандартные порты, TLS пришлось бы терминировать в каждом сервисе отдельно, маршрутизации по имени нет"
+    ]},
+    { "dot": "emerald", "title": "Стало", "items": [
+      "Единственная точка входа на стандартных :80/:443, маршрутизация по Host-заголовку, TLS-терминация и автопродление сертификатов в одном месте — сервисы внутри стали ClusterIP"
+    ]},
+    { "dot": "amber", "title": "Почему это работает", "items": [
+      "Тот же паттерн, что Traefik на Level 3.5: edge-прокси на границе. Ingress-контроллер — это правила (Ingress YAML) + исполнитель (ingress-nginx), а cert-manager снимает ручную работу с сертификатами"
+    ]}
+  ]
+}

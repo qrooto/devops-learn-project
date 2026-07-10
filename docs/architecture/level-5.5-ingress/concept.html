@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="generator" content="archify 2.9.0">
-  <title>Эволюция одной системы: от одного сервера до self-healing production-стека Diagram</title>
+  <title>Ingress — концепция Diagram</title>
   <script>
     // Resolve the theme before first paint so light-preference users don't
     // see a dark flash. The toolbar script below re-applies with UI state.
@@ -525,14 +525,14 @@
     <div class="header">
       <div class="header-row">
         <div class="pulse-dot"></div>
-        <h1>Эволюция одной системы: от одного сервера до self-healing production-стека</h1>
+        <h1>Ingress — концепция</h1>
       </div>
-      <p class="subtitle">15 уровней devops-project — каждый решает боль, которую создал предыдущий</p>
+      <p class="subtitle">Ресурс — только правила; исполняет их ingress-контроллер</p>
     </div>
 
     <!-- Main Diagram -->
     <div class="diagram-container">
-      <svg viewBox="0 0 1160 780" role="img" aria-label="Эволюция одной системы: от одного сервера до self-healing production-стека — 15 уровней devops-project — каждый решает боль, которую создал предыдущий (architecture diagram)">
+      <svg viewBox="0 0 880 572" role="img" aria-label="Ingress — концепция — Ресурс — только правила; исполняет их ingress-контроллер (architecture diagram)">
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -559,138 +559,59 @@
 
 
         <!-- Connection paths (before components for correct z-order) -->
-        <path d="M 220 142 L 260 142" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 440 142 L 480 142" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 660 142 L 700 142" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 880 142 L 920 142" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 1010 184 L 1010 242 Q 1010 250 1002 250 L 138 250 Q 130 250 130 258 L 130 340" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 220 382 L 260 382" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 440 382 L 480 382" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 660 382 L 700 382" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 880 382 L 920 382" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 1010 424 L 1010 482 Q 1010 490 1002 490 L 138 490 Q 130 490 130 498 L 130 580" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 220 622 L 260 622" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 440 622 L 480 622" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 660 622 L 700 622" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path d="M 880 622 L 920 622" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path d="M 180 342 L 300 342" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path d="M 410 184 L 410 300" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path d="M 410 300 L 527 300 Q 535 300 535 292 L 535 230 Q 535 222 543 222 L 660 222" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path d="M 410 384 L 527 384 Q 535 384 535 392 L 535 454 Q 535 462 543 462 L 660 462" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
 
         <!-- Components -->
-        <rect x="40" y="100" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="40" y="100" width="180" height="84" rx="6" class="c-security" stroke-width="1.5"/>
-        <text x="130" y="140" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">0</text>
-        <text x="130" y="156" class="t-muted" font-size="9" text-anchor="middle">VPS Hardening</text>
-        <text x="130" y="176" class="t-security" font-size="7" text-anchor="middle">SSH-ключи, firewall</text>
+        <rect x="40" y="300" width="140" height="84" rx="6" class="c-mask"/>
+        <rect x="40" y="300" width="140" height="84" rx="6" class="c-external" stroke-width="1.5"/>
+        <text x="110" y="340" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Клиент</text>
+        <text x="110" y="356" class="t-muted" font-size="9" text-anchor="middle">браузер</text>
 
-        <rect x="260" y="100" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="260" y="100" width="180" height="84" rx="6" class="c-backend" stroke-width="1.5"/>
-        <text x="350" y="140" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">1</text>
-        <text x="350" y="156" class="t-muted" font-size="9" text-anchor="middle">Monolith</text>
-        <text x="350" y="176" class="t-backend" font-size="7" text-anchor="middle">nginx → backend → postgres</text>
+        <rect x="300" y="100" width="220" height="84" rx="6" class="c-mask"/>
+        <rect x="300" y="100" width="220" height="84" rx="6" class="c-frontend" stroke-width="1.5"/>
+        <text x="410" y="140" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Ingress (YAML)</text>
+        <text x="410" y="156" class="t-muted" font-size="9" text-anchor="middle">правила: Host / path → Service</text>
+        <text x="410" y="176" class="t-frontend" font-size="7" text-anchor="middle">сам по себе ничего не делает</text>
 
-        <rect x="480" y="100" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="480" y="100" width="180" height="84" rx="6" class="c-backend" stroke-width="1.5"/>
-        <text x="570" y="140" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">2</text>
-        <text x="570" y="156" class="t-muted" font-size="9" text-anchor="middle">Scaling</text>
-        <text x="570" y="176" class="t-backend" font-size="7" text-anchor="middle">3× backend + load balancer</text>
+        <rect x="300" y="300" width="220" height="84" rx="6" class="c-mask"/>
+        <rect x="300" y="300" width="220" height="84" rx="6" class="c-security" stroke-width="1.5"/>
+        <text x="410" y="340" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Ingress-контроллер</text>
+        <text x="410" y="356" class="t-muted" font-size="9" text-anchor="middle">ingress-nginx :80/:443</text>
+        <text x="410" y="376" class="t-security" font-size="7" text-anchor="middle">исполнитель правил, TLS-терминация</text>
 
-        <rect x="700" y="100" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="700" y="100" width="180" height="84" rx="6" class="c-database" stroke-width="1.5"/>
-        <text x="790" y="140" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">3</text>
-        <text x="790" y="156" class="t-muted" font-size="9" text-anchor="middle">Caching</text>
-        <text x="790" y="176" class="t-database" font-size="7" text-anchor="middle">+ Redis</text>
+        <rect x="660" y="180" width="180" height="84" rx="6" class="c-mask"/>
+        <rect x="660" y="180" width="180" height="84" rx="6" class="c-cloud" stroke-width="1.5"/>
+        <text x="750" y="220" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Service frontend</text>
+        <text x="750" y="236" class="t-muted" font-size="9" text-anchor="middle">ClusterIP</text>
 
-        <rect x="920" y="100" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="920" y="100" width="180" height="84" rx="6" class="c-security" stroke-width="1.5"/>
-        <text x="1010" y="140" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">3.5</text>
-        <text x="1010" y="156" class="t-muted" font-size="9" text-anchor="middle">HTTPS</text>
-        <text x="1010" y="176" class="t-security" font-size="7" text-anchor="middle">+ Traefik, TLS</text>
-
-        <rect x="40" y="340" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="40" y="340" width="180" height="84" rx="6" class="c-cloud" stroke-width="1.5"/>
-        <text x="130" y="380" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">4</text>
-        <text x="130" y="396" class="t-muted" font-size="9" text-anchor="middle">CI/CD (GitLab)</text>
-        <text x="130" y="416" class="t-cloud" font-size="7" text-anchor="middle">автоматический pipeline</text>
-
-        <rect x="260" y="340" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="260" y="340" width="180" height="84" rx="6" class="c-cloud" stroke-width="1.5"/>
-        <text x="350" y="380" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">5</text>
-        <text x="350" y="396" class="t-muted" font-size="9" text-anchor="middle">Kubernetes</text>
-        <text x="350" y="416" class="t-cloud" font-size="7" text-anchor="middle">self-healing, автомасштаб</text>
-
-        <rect x="480" y="340" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="480" y="340" width="180" height="84" rx="6" class="c-security" stroke-width="1.5"/>
-        <text x="570" y="380" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">5.5</text>
-        <text x="570" y="396" class="t-muted" font-size="9" text-anchor="middle">Ingress</text>
-        <text x="570" y="416" class="t-security" font-size="7" text-anchor="middle">+ cert-manager, TLS в кластере</text>
-
-        <rect x="700" y="340" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="700" y="340" width="180" height="84" rx="6" class="c-database" stroke-width="1.5"/>
-        <text x="790" y="380" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">6</text>
-        <text x="790" y="396" class="t-muted" font-size="9" text-anchor="middle">Monitoring</text>
-        <text x="790" y="416" class="t-database" font-size="7" text-anchor="middle">Prometheus/Grafana/Loki</text>
-
-        <rect x="920" y="340" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="920" y="340" width="180" height="84" rx="6" class="c-backend" stroke-width="1.5"/>
-        <text x="1010" y="380" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">6.5</text>
-        <text x="1010" y="396" class="t-muted" font-size="9" text-anchor="middle">AI Agent</text>
-        <text x="1010" y="416" class="t-backend" font-size="7" text-anchor="middle">LLM диагностирует алерты</text>
-
-        <rect x="40" y="580" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="40" y="580" width="180" height="84" rx="6" class="c-cloud" stroke-width="1.5"/>
-        <text x="130" y="620" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">7</text>
-        <text x="130" y="636" class="t-muted" font-size="9" text-anchor="middle">Helm</text>
-        <text x="130" y="656" class="t-cloud" font-size="7" text-anchor="middle">версии релизов, blue-green</text>
-
-        <rect x="260" y="580" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="260" y="580" width="180" height="84" rx="6" class="c-security" stroke-width="1.5"/>
-        <text x="350" y="620" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">8</text>
-        <text x="350" y="636" class="t-muted" font-size="9" text-anchor="middle">GitOps</text>
-        <text x="350" y="656" class="t-security" font-size="7" text-anchor="middle">ArgoCD, Git = истина</text>
-
-        <rect x="480" y="580" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="480" y="580" width="180" height="84" rx="6" class="c-security" stroke-width="1.5"/>
-        <text x="570" y="620" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">8.5</text>
-        <text x="570" y="636" class="t-muted" font-size="9" text-anchor="middle">Secrets</text>
-        <text x="570" y="656" class="t-security" font-size="7" text-anchor="middle">Sealed Secrets: шифротекст в Git</text>
-
-        <rect x="700" y="580" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="700" y="580" width="180" height="84" rx="6" class="c-cloud" stroke-width="1.5"/>
-        <text x="790" y="620" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">9</text>
-        <text x="790" y="636" class="t-muted" font-size="9" text-anchor="middle">Terraform</text>
-        <text x="790" y="656" class="t-cloud" font-size="7" text-anchor="middle">инфраструктура как код</text>
-
-        <rect x="920" y="580" width="180" height="84" rx="6" class="c-mask"/>
-        <rect x="920" y="580" width="180" height="84" rx="6" class="c-cloud" stroke-width="1.5"/>
-        <text x="1010" y="620" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">10</text>
-        <text x="1010" y="636" class="t-muted" font-size="9" text-anchor="middle">Ansible</text>
-        <text x="1010" y="656" class="t-cloud" font-size="7" text-anchor="middle">конфигурация N серверов</text>
+        <rect x="660" y="420" width="180" height="84" rx="6" class="c-mask"/>
+        <rect x="660" y="420" width="180" height="84" rx="6" class="c-cloud" stroke-width="1.5"/>
+        <text x="750" y="460" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Service api</text>
+        <text x="750" y="476" class="t-muted" font-size="9" text-anchor="middle">ClusterIP</text>
 
         <!-- Connection labels -->
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        <rect x="211" y="276" width="58" height="14" rx="3" class="c-mask"/>
+        <text x="240" y="286" class="t-backend" font-size="8" text-anchor="middle">HTTPS :443</text>
+        <rect x="371.4" y="188" width="77.2" height="14" rx="3" class="c-mask"/>
+        <text x="410" y="198" class="t-messagebus" font-size="8" text-anchor="middle">читает правила</text>
+        <rect x="489.2" y="241" width="91.6" height="14" rx="3" class="c-mask"/>
+        <text x="535" y="251" class="t-backend" font-size="8" text-anchor="middle">Host: example.com</text>
+        <rect x="479.6" y="403" width="110.8" height="14" rx="3" class="c-mask"/>
+        <text x="535" y="413" class="t-backend" font-size="8" text-anchor="middle">Host: api.example.com</text>
 
         <!-- Legend -->
-        <text x="40" y="751" class="t-primary" font-size="9" font-weight="600">Legend</text>
-        <rect x="40" y="756" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
-        <text x="60" y="764" class="t-muted" font-size="8">Security</text>
-        <rect x="138" y="756" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
-        <text x="158" y="764" class="t-muted" font-size="8">Backend</text>
-        <rect x="231" y="756" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
-        <text x="251" y="764" class="t-muted" font-size="8">Database</text>
-        <rect x="329" y="756" width="14" height="9" rx="2" class="c-cloud" stroke-width="1"/>
-        <text x="349" y="764" class="t-muted" font-size="8">Cloud</text>
+        <text x="40" y="543" class="t-primary" font-size="9" font-weight="600">Legend</text>
+        <rect x="40" y="548" width="14" height="9" rx="2" class="c-external" stroke-width="1"/>
+        <text x="60" y="556" class="t-muted" font-size="8">External</text>
+        <rect x="138" y="548" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
+        <text x="158" y="556" class="t-muted" font-size="8">Frontend</text>
+        <rect x="236" y="548" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
+        <text x="256" y="556" class="t-muted" font-size="8">Security</text>
+        <rect x="334" y="548" width="14" height="9" rx="2" class="c-cloud" stroke-width="1"/>
+        <text x="354" y="556" class="t-muted" font-size="8">Cloud</text>
       </svg>
     </div>
 
@@ -698,41 +619,23 @@
     <div class="cards">
       <div class="card">
         <div class="card-header">
-          <div class="card-dot cyan"></div>
-          <h3>Эра 1 — Основы (0 → 3.5)</h3>
+          <div class="card-dot rose"></div>
+          <h3>🧠 Держи в голове</h3>
         </div>
         <ul>
-          <li>&bull; Один сервер → много серверов → кэш → шифрование. Фундамент, на котором держится всё остальное</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <div class="card-dot emerald"></div>
-          <h3>Эра 2 — Автоматизация доставки (4)</h3>
-        </div>
-        <ul>
-          <li>&bull; Код сам добирается до сервера через pipeline, без ручного SSH и restart</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <div class="card-dot violet"></div>
-          <h3>Эра 3 — Оркестрация и наблюдаемость (5 → 7)</h3>
-        </div>
-        <ul>
-          <li>&bull; Кластер сам себя лечит и масштабируется, вход через Ingress с авто-TLS, ты видишь что происходит, LLM помогает с диагностикой, релизы версионируются</li>
+          <li>&bull; Ingress — это ТОЛЬКО правила маршрутизации; без установленного контроллера ресурс создастся, но исполнять его некому — ADDRESS останется пустым</li>
+          <li>&bull; ingressClassName говорит КАКОЙ контроллер обслуживает этот Ingress — без него правила повиснут необслуженными (частая ловушка)</li>
+          <li>&bull; Один вход на весь кластер: сервисов может быть сколько угодно, наружу всё равно открыты только :80/:443 контроллера — Default Deny в действии</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot amber"></div>
-          <h3>Эра 4 — Production-grade управление (8 → 10)</h3>
+          <h3>Параллель с Level 3.5</h3>
         </div>
         <ul>
-          <li>&bull; Git — источник правды для кластера (GitOps), секреты в Git — только шифротекстом (Sealed Secrets), а инфраструктура и конфигурация серверов — тоже код (Terraform, Ansible)</li>
+          <li>&bull; Traefik в docker-compose делал ровно это же: edge-прокси терминирует TLS и маршрутизирует по Host — тот же паттерн, другой инструмент, теперь внутри кластера</li>
         </ul>
       </div>
     </div>

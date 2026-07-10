@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Ingress — концепция",
+    "subtitle": "Ресурс — только правила; исполняет их ingress-контроллер",
+    "output": "concept.html"
+  },
+  "components": [
+    { "id": "client", "type": "external", "label": "Клиент", "sublabel": "браузер", "pos": [40, 300], "size": [140, 84] },
+    { "id": "rules", "type": "frontend", "label": "Ingress (YAML)", "sublabel": "правила: Host / path → Service", "tag": "сам по себе ничего не делает", "pos": [300, 100], "size": [220, 84] },
+    { "id": "controller", "type": "security", "label": "Ingress-контроллер", "sublabel": "ingress-nginx :80/:443", "tag": "исполнитель правил, TLS-терминация", "pos": [300, 300], "size": [220, 84] },
+    { "id": "svca", "type": "cloud", "label": "Service frontend", "sublabel": "ClusterIP", "pos": [660, 180], "size": [180, 84] },
+    { "id": "svcb", "type": "cloud", "label": "Service api", "sublabel": "ClusterIP", "pos": [660, 420], "size": [180, 84] }
+  ],
+  "connections": [
+    { "from": "client", "to": "controller", "label": "HTTPS :443", "variant": "emphasis", "labelDy": -46 },
+    { "from": "rules", "to": "controller", "label": "читает правила", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelAt": [410, 198] },
+    { "from": "controller", "to": "svca", "label": "Host: example.com", "variant": "emphasis", "fromSide": "top", "toSide": "left" },
+    { "from": "controller", "to": "svcb", "label": "Host: api.example.com", "variant": "emphasis", "fromSide": "bottom", "toSide": "left" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "Ingress — это ТОЛЬКО правила маршрутизации; без установленного контроллера ресурс создастся, но исполнять его некому — ADDRESS останется пустым",
+      "ingressClassName говорит КАКОЙ контроллер обслуживает этот Ingress — без него правила повиснут необслуженными (частая ловушка)",
+      "Один вход на весь кластер: сервисов может быть сколько угодно, наружу всё равно открыты только :80/:443 контроллера — Default Deny в действии"
+    ]},
+    { "dot": "amber", "title": "Параллель с Level 3.5", "items": [
+      "Traefik в docker-compose делал ровно это же: edge-прокси терминирует TLS и маршрутизирует по Host — тот же паттерн, другой инструмент, теперь внутри кластера"
+    ]}
+  ]
+}

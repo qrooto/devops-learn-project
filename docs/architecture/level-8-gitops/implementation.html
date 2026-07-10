@@ -628,6 +628,17 @@
           <li>&bull; CI больше не имеет прямого доступа к кластеру — его роль ограничена сборкой образа и коммитом обновлённого тега в Git</li>
         </ul>
       </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>Ловушка :latest</h3>
+        </div>
+        <ul>
+          <li>&bull; CI запушил новый образ под тем же тегом latest → текст манифеста в Git не изменился → ArgoCD не видит diff и НЕ деплоит, Kubernetes не перекатывает Pod-ы</li>
+          <li>&bull; Поэтому тег должен быть иммутабельным (git SHA: backend:a1b2c3d), а деплой новой версии = коммит с новым тегом в Git — история деплоев совпадает с историей Git, откат = git revert</li>
+        </ul>
+      </div>
     </div>
 
     <!-- Footer -->

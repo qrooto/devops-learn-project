@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Sealed Secrets — концепция",
+    "subtitle": "В Git лежит шифротекст; расшифровать может только контроллер внутри кластера",
+    "output": "concept.html"
+  },
+  "components": [
+    { "id": "plain", "type": "frontend", "label": "secret.yml (plain)", "sublabel": "существует только локально", "tag": "удалить после запечатывания!", "pos": [40, 120], "size": [210, 84] },
+    { "id": "kubeseal", "type": "security", "label": "kubeseal CLI", "sublabel": "шифрует ПУБЛИЧНЫМ ключом", "pos": [340, 120], "size": [210, 84] },
+    { "id": "git", "type": "database", "label": "Git: SealedSecret", "sublabel": "шифротекст — можно коммитить", "pos": [640, 120], "size": [210, 84] },
+    { "id": "argocd", "type": "cloud", "label": "ArgoCD", "sublabel": "обычный sync из Git", "pos": [640, 360], "size": [210, 84] },
+    { "id": "controller", "type": "security", "label": "sealed-secrets controller", "sublabel": "ПРИВАТНЫЙ ключ — не покидает кластер", "pos": [340, 360], "size": [230, 84] },
+    { "id": "secret", "type": "database", "label": "Secret в кластере", "sublabel": "читает только приложение", "pos": [40, 360], "size": [210, 84] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Твоя машина", "wraps": ["plain", "kubeseal"] },
+    { "kind": "security-group", "label": "Kubernetes cluster", "wraps": ["argocd", "controller", "secret"] }
+  ],
+  "connections": [
+    { "from": "plain", "to": "kubeseal", "variant": "emphasis" },
+    { "from": "kubeseal", "to": "git", "label": "git push", "variant": "emphasis", "labelDy": -46 },
+    { "from": "git", "to": "argocd", "label": "sync", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "labelAt": [745, 218] },
+    { "from": "argocd", "to": "controller", "label": "применяет SealedSecret", "variant": "emphasis", "fromSide": "left", "toSide": "right", "labelDy": -46 },
+    { "from": "controller", "to": "secret", "label": "расшифровал → создал", "variant": "emphasis", "fromSide": "left", "toSide": "right", "labelDy": -46 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "🧠 Держи в голове", "items": [
+      "base64 в поле data обычного Secret — это КОДИРОВКА, не шифрование: раскодирует любой одной командой; SealedSecret — настоящее асимметричное шифрование",
+      "Публичным ключом можно только ЗАШИФРОВАТЬ — поэтому kubeseal может запускать кто угодно, а расшифровка возможна только приватным ключом внутри кластера",
+      "Шифротекст привязан к namespace + имени секрета (strict scope): украденный из Git SealedSecret нельзя развернуть в чужом namespace и прочитать"
+    ]},
+    { "dot": "amber", "title": "Новая точка отказа", "items": [
+      "Приватный ключ контроллера — концентрация риска: его бэкапят вне Git, а доступ к kube-system ограничивают RBAC; потерял ключ (minikube delete) — все SealedSecrets в Git превратились в мусор"
+    ]}
+  ]
+}

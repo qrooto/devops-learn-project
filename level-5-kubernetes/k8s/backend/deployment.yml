@@ -15,8 +15,14 @@ spec:
     spec:
       containers:
         - name: backend
-          # Замени на свой образ после настройки CI/CD
-          # image: ghcr.io/<твой-username>/devops-project/bulletin-board-backend:latest
+          # ⚠️ :latest здесь — только для локального minikube (образ собирается на месте).
+          # В реальном флоу тег должен быть ИММУТАБЕЛЬНЫМ — по коммиту, например
+          # :$CI_COMMIT_SHA из CI (level-4-gitlab уже тегает образы так):
+          # image: ghcr.io/<твой-username>/devops-project/bulletin-board-backend:a1b2c3d
+          # Почему: под одним и тем же тегом latest контент меняется — Kubernetes
+          # не увидит «изменения» в манифесте и не перекатит Pod-ы, ArgoCD не увидит
+          # diff с Git, а откат на «предыдущий latest» невозможен в принципе.
+          # Подробнее: level-8 README, раздел «Как GitOps узнаёт о новом образе».
           image: bulletin-board-backend:latest
           imagePullPolicy: IfNotPresent
           ports:

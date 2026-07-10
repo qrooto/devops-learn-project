@@ -3,6 +3,9 @@
 backend:
   image:
     repository: bulletin-board-backend
+    # ⚠️ latest — только для локального minikube. В реальном флоу тег иммутабельный
+    # (git SHA), его подставляет CI: helm upgrade --set backend.image.tag=$CI_COMMIT_SHA
+    # Почему latest — грабля: см. level-8 README, «Как GitOps узнаёт о новом образе».
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 3

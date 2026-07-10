@@ -84,6 +84,7 @@ cd devops-project
 | 4a | `level-4-cicd/` | GitHub Actions | CI/CD в облаке, rolling update |
 | 4b | `level-4-gitlab/` | Self-hosted GitLab CE + GitLab CI | Git-платформа, MR, Registry, Environments |
 | 5 | `level-5-kubernetes/` | minikube, kubectl | Оркестрация, self-healing, HPA, probes |
+| 5.5 | `level-5.5-ingress/` | ingress-nginx, cert-manager | Ingress, TLS в кластере, ACME |
 | 6 | `level-6-monitoring/` | Prometheus, Grafana, Loki, Promtail, cAdvisor | Полный observability stack |
 | 6.5 | `level-6.5-ai-agent/` | Python, FastAPI, Claude API, Telegram Bot API | AI-диагностика, webhook, approve/reject actions |
 | 7 | `level-7-helm/` | Helm | Helm charts, blue-green, canary |
@@ -96,7 +97,7 @@ cd devops-project
 
 ```
 1 (Монолит) → 2 (Масштабирование) → 3 (Кэш) → 3.5 (HTTPS)
-  → 4b (GitLab) → 5 (Kubernetes) → 6 (Мониторинг) → 6.5 (AI Agent) → 7 (Helm)
+  → 4b (GitLab) → 5 (Kubernetes) → 5.5 (Ingress) → 6 (Мониторинг) → 6.5 (AI Agent) → 7 (Helm)
   → 8 (GitOps) → 8.5 (Секреты) → 9 (Terraform) → 10 (Ansible)
 ```
 
@@ -121,6 +122,7 @@ cd devops-project
 | HTTP не защищён, нет сертификата | Уровень 3.5: Traefik + Let's Encrypt |
 | Деплой роняет сервис на несколько секунд | Уровень 4: CI/CD + rolling update |
 | Docker Compose не перезапускает упавшие контейнеры | Уровень 5: Kubernetes self-healing |
+| Наружу торчит NodePort 30080, нет TLS и маршрутизации | Уровень 5.5: Ingress + cert-manager |
 | Не видно что происходит в production | Уровень 6: Prometheus + Grafana + Loki |
 | Алерты требуют ручной интерпретации логов и метрик | Уровень 6.5: AI-агент с диагностикой через Claude API |
 | Деплой K8s — набор kubectl apply по очереди | Уровень 7: Helm |

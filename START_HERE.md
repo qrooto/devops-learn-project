@@ -161,6 +161,7 @@ devops-project/
 ├── level-4-cicd/          ← + GitHub Actions
 ├── level-4-gitlab/        ← + Self-hosted GitLab CE
 ├── level-5-kubernetes/    ← minikube, kubectl, HPA
+├── level-5.5-ingress/     ← ingress-nginx, cert-manager, TLS в кластере
 ├── level-6-monitoring/    ← Prometheus, Grafana, Loki
 ├── level-6.5-ai-agent/    ← AI-диагностика через Claude API
 ├── level-7-helm/          ← Helm charts, blue-green
@@ -175,7 +176,7 @@ devops-project/
 ## Рекомендуемый порядок
 
 ```
-0 → 1 → 2 → 3 → 3.5 → 4b (GitLab) → 5 → 6 → 6.5 → 7 → 8 → 8.5 → 9 → 10
+0 → 1 → 2 → 3 → 3.5 → 4b (GitLab) → 5 → 5.5 → 6 → 6.5 → 7 → 8 → 8.5 → 9 → 10
 ```
 
 **Уровень 0 обязателен** — настройка VPS делается один раз до всего остального.

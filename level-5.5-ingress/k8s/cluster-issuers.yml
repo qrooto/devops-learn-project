@@ -1,0 +1,33 @@
+# ClusterIssuer — «кто выдаёт сертификаты» для cert-manager (cluster-wide).
+#
+# Здесь два issuer-а:
+#   selfsigned          — работает где угодно, включая локальный minikube. Для практики.
+#   letsencrypt-staging — настоящий ACME-флоу Let's Encrypt, но нужен ПУБЛИЧНЫЙ домен:
+#                         LE должен достучаться до кластера снаружи (HTTP-01 challenge).
+#                         На локальном minikube выдача не пройдёт — как и в level-3.5,
+#                         где Traefik требовал реальный домен.
+#
+# Почему staging, а не прод LE: staging не имеет жёстких rate-limit-ов,
+# на нём тренируются; сертификат будет «недоверенным» браузером — это нормально.
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: you@example.com   # ЗАМЕНИ: сюда LE шлёт предупреждения об истечении
+    privateKeySecretRef:
+      name: letsencrypt-staging-key   # приватный ключ ACME-аккаунта (создаст cert-manager)
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx   # challenge-запросы LE придут через наш ingress

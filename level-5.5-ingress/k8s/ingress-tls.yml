@@ -1,0 +1,29 @@
+# Тот же Ingress, но с TLS: cert-manager видит аннотацию cluster-issuer,
+# сам выпускает сертификат и кладёт его в Secret bulletin-local-tls.
+# Это внутрикластерный аналог того, что в level-3.5 делал Traefik c Let's Encrypt.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bulletin-board
+  namespace: bulletin-board
+  annotations:
+    # Для локального minikube — selfsigned; на реальном сервере с доменом
+    # поменяй на letsencrypt-staging (а когда всё заработает — на прод-issuer).
+    cert-manager.io/cluster-issuer: selfsigned
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - bulletin.local
+      secretName: bulletin-local-tls   # сюда cert-manager положит сертификат
+  rules:
+    - host: bulletin.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx
+                port:
+                  number: 80

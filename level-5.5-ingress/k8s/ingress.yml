@@ -1,0 +1,23 @@
+# Ingress — правила маршрутизации внешнего HTTP(S)-трафика внутрь кластера.
+# Сам по себе Ingress — только правила; исполняет их ingress-контроллер
+# (у нас ingress-nginx, ставится через minikube addons enable ingress).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bulletin-board
+  namespace: bulletin-board
+spec:
+  # Какой контроллер обслуживает этот Ingress. Без ingressClassName
+  # Ingress повиснет необслуженным (см. фазу «сломай» в README).
+  ingressClassName: nginx
+  rules:
+    - host: bulletin.local   # маршрутизация по Host-заголовку
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx   # ClusterIP-сервис уровня 5
+                port:
+                  number: 80

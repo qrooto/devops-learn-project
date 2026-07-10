@@ -1,0 +1,15 @@
+# Заменяет NodePort-сервис уровня 5: снаружи теперь пускает Ingress,
+# nginx достаточно быть доступным внутри кластера (ClusterIP).
+# Применение поверх старого сервиса: kubectl apply -f nginx-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  namespace: bulletin-board
+spec:
+  selector:
+    app: nginx
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP   # было NodePort:30080 — «чёрный ход» больше не нужен

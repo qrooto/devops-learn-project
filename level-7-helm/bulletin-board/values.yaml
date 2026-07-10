@@ -18,7 +18,13 @@ postgres:
   image: postgres:16-alpine
   database: bulletin_board
   user: postgres
-  password: postgres   # в production замени на Kubernetes Secret из внешнего хранилища
+  # 🔒 Security: пароль намеренно НЕ задан — values.yaml коммитится в Git,
+  # секретам здесь не место. Передай при установке:
+  #   helm install ... --set postgres.password=...
+  # или через локальный файл: cp ../values-example.yaml ../values-local.yaml
+  # (values-local.yaml в .gitignore). Как хранить секреты в Git правильно
+  # (SealedSecrets, SOPS, External Secrets) — см. level-8.5-secrets.
+  password: ""
   storage: 1Gi
 
 redis:

@@ -88,6 +88,7 @@ cd devops-project
 | 6.5 | `level-6.5-ai-agent/` | Python, FastAPI, Claude API, Telegram Bot API | AI-диагностика, webhook, approve/reject actions |
 | 7 | `level-7-helm/` | Helm | Helm charts, blue-green, canary |
 | 8 | `level-8-gitops/` | ArgoCD | GitOps, drift detection, self-healing |
+| 8.5 | `level-8.5-secrets/` | Sealed Secrets, kubeseal | Секреты в Git: шифрование, SOPS/ESO обзорно |
 | 9 | `level-9-terraform/` | Terraform | Infrastructure as Code, state, plan/apply |
 | 10 | `level-10-ansible/` | Ansible, роли, handlers, Vault | Fleet provisioning, config management |
 
@@ -96,7 +97,7 @@ cd devops-project
 ```
 1 (Монолит) → 2 (Масштабирование) → 3 (Кэш) → 3.5 (HTTPS)
   → 4b (GitLab) → 5 (Kubernetes) → 6 (Мониторинг) → 6.5 (AI Agent) → 7 (Helm)
-  → 8 (GitOps) → 9 (Terraform) → 10 (Ansible)
+  → 8 (GitOps) → 8.5 (Секреты) → 9 (Terraform) → 10 (Ansible)
 ```
 
 Уровень 4a (GitHub Actions) — параллельно с 4b для сравнения двух CI/CD систем.
@@ -124,6 +125,7 @@ cd devops-project
 | Алерты требуют ручной интерпретации логов и метрик | Уровень 6.5: AI-агент с диагностикой через Claude API |
 | Деплой K8s — набор kubectl apply по очереди | Уровень 7: Helm |
 | Кто-то вручную изменил K8s ресурс — не знаем | Уровень 8: ArgoCD drift detection |
+| ArgoCD деплоит из Git, а секрет в Git = утечка | Уровень 8.5: Sealed Secrets |
 | Инфраструктура создаётся руками, не воспроизводимо | Уровень 9: Terraform |
 | Настройка 10+ VM — вручную, медленно, неповторяемо | Уровень 10: Ansible fleet management |
 

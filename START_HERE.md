@@ -119,6 +119,7 @@ git push origin main
 | Что произойдёт с Pod если он превысит memory limit? | 5 |
 | Чем requests отличается от limits в K8s? | 5 |
 | Что такое configuration drift и как ArgoCD его решает? | 8 |
+| Почему base64 — не шифрование, и как хранить секрет в Git не раскрывая его? | 8.5 |
 | Зачем Terraform state и почему его нельзя редактировать руками? | 9 |
 | Чем `notify/handlers` в Ansible лучше чем просто `restart service` в tasks? | 10 |
 
@@ -164,6 +165,7 @@ devops-project/
 ├── level-6.5-ai-agent/    ← AI-диагностика через Claude API
 ├── level-7-helm/          ← Helm charts, blue-green
 ├── level-8-gitops/        ← ArgoCD
+├── level-8.5-secrets/     ← Sealed Secrets: секреты в Git без утечки
 ├── level-9-terraform/     ← Terraform
 └── level-10-ansible/      ← Ansible
 ```
@@ -173,7 +175,7 @@ devops-project/
 ## Рекомендуемый порядок
 
 ```
-0 → 1 → 2 → 3 → 3.5 → 4b (GitLab) → 5 → 6 → 6.5 → 7 → 8 → 9 → 10
+0 → 1 → 2 → 3 → 3.5 → 4b (GitLab) → 5 → 6 → 6.5 → 7 → 8 → 8.5 → 9 → 10
 ```
 
 **Уровень 0 обязателен** — настройка VPS делается один раз до всего остального.

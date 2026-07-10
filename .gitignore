@@ -22,6 +22,9 @@ CLAUDE.md
 # .terraform.lock.hcl — спорно, можно коммитить для воспроизводимости
 # **/*.tfvars — если содержат секреты, добавь эту строку
 
+# Helm — локальные values с секретами (см. level-7-helm/values-example.yaml)
+**/values-local.yaml
+
 # ArgoCD
 **/argocd-initial-admin-secret
 

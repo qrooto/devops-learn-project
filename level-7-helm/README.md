@@ -102,13 +102,21 @@ spec:
 
 ## Шаг 3 — Проверить шаблоны (без K8s)
 
-**Перед каждым деплоем** — смотри что получится:
+**Сначала — пароль PostgreSQL.** 🔒 Security: в `values.yaml` пароль намеренно пустой — этот файл коммитится в Git, а секретам в Git не место (подробно — `level-8.5-secrets`). Без пароля рендер упадёт с понятной ошибкой (`required` в шаблоне). Создай локальный values-файл:
 
 ```bash
 cd level-7-helm
+cp values-example.yaml values-local.yaml   # values-local.yaml в .gitignore, в Git не попадёт
+# при желании поменяй пароль внутри
+```
 
+Во всех командах `helm template / install / upgrade` ниже добавляется `-f values-local.yaml`. Альтернатива — каждый раз передавать `--set postgres.password=...`.
+
+**Перед каждым деплоем** — смотри что получится:
+
+```bash
 # Отрисовать манифесты без отправки в K8s:
-helm template bulletin-board ./bulletin-board/
+helm template bulletin-board ./bulletin-board/ -f values-local.yaml
 ```
 
 Выведет все K8s манифесты с подставленными значениями. Можно передать в `kubectl apply` напрямую, но обычно используют `helm install`.
@@ -121,7 +129,7 @@ helm lint ./bulletin-board/
 
 ```bash
 # Dry run — симулирует установку, показывает что будет создано:
-helm install bulletin-board ./bulletin-board/ --dry-run --debug
+helm install bulletin-board ./bulletin-board/ -f values-local.yaml --dry-run --debug
 ```
 
 ---
@@ -137,7 +145,7 @@ eval $(minikube docker-env)
 docker build -t bulletin-board-backend:latest ../level-3-caching/backend/
 
 # Установить чарт:
-helm install bulletin-board ./bulletin-board/
+helm install bulletin-board ./bulletin-board/ -f values-local.yaml
 ```
 
 **Вывод:**
@@ -163,7 +171,7 @@ kubectl get all -n bulletin-board
 
 ```bash
 # Изменить количество реплик без редактирования файлов:
-helm upgrade bulletin-board ./bulletin-board/ --set backend.replicas=5
+helm upgrade bulletin-board ./bulletin-board/ -f values-local.yaml --set backend.replicas=5
 
 # Наблюдать rolling update:
 kubectl get pods -n bulletin-board -w
@@ -189,7 +197,7 @@ postgres:
 
 ```bash
 # Деплой в prod:
-helm upgrade bulletin-board ./bulletin-board/ -f values-prod.yaml
+helm upgrade bulletin-board ./bulletin-board/ -f values-local.yaml -f values-prod.yaml
 ```
 
 Один чарт — три окружения (dev/staging/prod), каждое с своими values.
@@ -261,6 +269,7 @@ docker build -t bulletin-board-backend:v2 ../level-3-caching/backend/
 
 # Создай green Deployment через helm upgrade с новым слотом:
 helm upgrade bulletin-board ./bulletin-board/ \
+  -f values-local.yaml \
   --set backend.slot=green \
   --set backend.image.tag=v2
 
@@ -411,7 +420,7 @@ git push origin main
 
 **1. Никогда не хранить пароли в `values.yaml`**
 
-`values.yaml` коммитится в git. Если туда попал пароль PostgreSQL или SECRET_KEY — он навсегда в истории репозитория.
+`values.yaml` коммитится в git. Если туда попал пароль PostgreSQL или SECRET_KEY — он навсегда в истории репозитория. Именно поэтому в нашем чарте `postgres.password` пустой, а шаблон через `required` отказывается рендериться без пароля — забыть его невозможно.
 
 Правильный подход:
 ```bash
@@ -469,10 +478,10 @@ helm list -A
 
 # Если хочешь переустановить:
 helm uninstall bulletin-board
-helm install bulletin-board ./bulletin-board/
+helm install bulletin-board ./bulletin-board/ -f values-local.yaml
 
 # Или если хочешь обновить (правильный путь):
-helm upgrade --install bulletin-board ./bulletin-board/
+helm upgrade --install bulletin-board ./bulletin-board/ -f values-local.yaml
 # --install: установит если не существует, обновит если существует
 ```
 
@@ -480,17 +489,17 @@ helm upgrade --install bulletin-board ./bulletin-board/
 
 ```bash
 # Проверяем без деплоя:
-helm template bulletin-board ./bulletin-board/ 2>&1 | head -30
+helm template bulletin-board ./bulletin-board/ -f values-local.yaml 2>&1 | head -30
 
 # Lint (статический анализ):
 helm lint ./bulletin-board/
 
 # Dry run с подробным выводом:
-helm install bulletin-board ./bulletin-board/ --dry-run --debug 2>&1 | grep -E "Error|error"
+helm install bulletin-board ./bulletin-board/ -f values-local.yaml --dry-run --debug 2>&1 | grep -E "Error|error"
 
 # Частая ошибка: отступы в шаблонах (YAML чувствителен к пробелам)
 # Проверь конкретный файл:
-helm template ./bulletin-board/ --show-only templates/backend.yaml
+helm template ./bulletin-board/ -f values-local.yaml --show-only templates/backend.yaml
 ```
 
 **3. Blue-Green: трафик не переключается**
@@ -537,7 +546,7 @@ helm get values bulletin-board
 helm get values bulletin-board --all
 
 # Сравнить с тем что ты хочешь:
-helm upgrade bulletin-board ./bulletin-board/ --dry-run | grep replicas
+helm upgrade bulletin-board ./bulletin-board/ -f values-local.yaml --dry-run | grep replicas
 ```
 
 ---

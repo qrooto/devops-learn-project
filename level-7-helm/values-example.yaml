@@ -1,0 +1,13 @@
+# Пример локального values-файла с секретами.
+# Скопируй и задай свой пароль:
+#   cp values-example.yaml values-local.yaml
+# values-local.yaml в .gitignore — он НЕ попадает в Git.
+#
+# Использование:
+#   helm install bulletin-board ./bulletin-board/ -f values-local.yaml
+#
+# Почему так: values.yaml коммитится в Git, пароль в нём = утечка.
+# Как хранить секреты в Git по-настоящему (SealedSecrets, SOPS) — level-8.5-secrets.
+
+postgres:
+  password: postgres   # учебный плейсхолдер — замени на свой

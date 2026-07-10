@@ -4,6 +4,7 @@
 stages:
   - test
   - build
+  - scan
   - deploy
 
 variables:
@@ -36,6 +37,14 @@ lint:
     - ruff check level-3-caching/backend/main.py
   allow_failure: true   # не блокируем pipeline если линтер ругается
 
+# Линтер Dockerfile: ловит антипаттерны (latest-теги, apt без -y, лишние слои)
+hadolint:
+  stage: test
+  image: hadolint/hadolint:latest-debian
+  script:
+    - hadolint level-3-caching/backend/Dockerfile
+  allow_failure: true
+
 # ─── Сборка Docker образа ────────────────────────────────────────────────────
 
 build-backend:
@@ -44,15 +53,41 @@ build-backend:
   services:
     - docker:dind    # Docker-in-Docker: позволяет запускать docker внутри runner
   before_script:
-    # Логинимся в GitLab Container Registry (учётные данные предоставляет GitLab автоматически)
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    # Логинимся в GitLab Container Registry (учётные данные предоставляет GitLab автоматически).
+    # 🔒 Security: пароль через stdin, а не через -p — иначе он виден в argv процесса
+    # (ps aux на runner-е) и в логах предупреждением docker.
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
     - docker build -t $BACKEND_IMAGE:$CI_COMMIT_SHA level-3-caching/backend/
     - docker tag $BACKEND_IMAGE:$CI_COMMIT_SHA $BACKEND_IMAGE:latest
     - docker push $BACKEND_IMAGE:$CI_COMMIT_SHA
     - docker push $BACKEND_IMAGE:latest
-  only:
-    - main   # собираем только при пуше в main
+  # rules — современный синтаксис условий запуска (only/except — легаси, не развивается)
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH   # собираем только при пуше в main
+
+# ─── Security-скан образа ────────────────────────────────────────────────────
+
+# Trivy сканирует собранный образ на известные уязвимости (CVE) в OS-пакетах
+# и python-зависимостях. Пока allow_failure: true — смотрим отчёт, не блокируем.
+# Как ужесточать: убери allow_failure и добавь --exit-code 1 --severity CRITICAL —
+# pipeline начнёт падать при критических уязвимостях (потом добавь HIGH).
+trivy-scan:
+  stage: scan
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  variables:
+    # Trivy сам логинится в registry по этим переменным
+    TRIVY_USERNAME: $CI_REGISTRY_USER
+    TRIVY_PASSWORD: $CI_REGISTRY_PASSWORD
+  script:
+    - trivy image --severity HIGH,CRITICAL $BACKEND_IMAGE:$CI_COMMIT_SHA
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  needs:
+    - build-backend
 
 # ─── Деплой ──────────────────────────────────────────────────────────────────
 
@@ -79,9 +114,13 @@ deploy-prod:
           sleep 5
         done
       "
-  only:
-    - main
-  when: manual   # деплой требует ручного подтверждения (кнопка в GitLab UI)
+  rules:
+    # when: manual — деплой требует ручного подтверждения (кнопка ▶ в GitLab UI).
+    # allow_failure: true — иначе manual-job в rules блокирует пайплайн (статус blocked
+    # вместо passed); с легаси only/when так было по умолчанию.
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
   needs:
     - build-backend
     - unit-tests

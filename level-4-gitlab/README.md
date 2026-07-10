@@ -224,7 +224,8 @@ build-backend:
   services:
     - docker:24-dind        # Docker-in-Docker — чтобы внутри runner'а строить образы
   script:
-    - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+    # пароль через stdin, а не -p: иначе он засветится в argv и warning-е docker
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
     - docker build -t $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA .
     - docker push ...
 

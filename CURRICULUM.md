@@ -3887,7 +3887,10 @@ ls playbooks/roles/
             упавшие контейнеры                → Уровень 5
             Несколько серверов — хаос
 
-Уровень 5   При инциденте — слепота           Prometheus + Grafana + Loki
+Уровень 5   Наружу торчит NodePort:30080 —    Ingress + cert-manager
+            нестандартный порт, нет TLS       → Уровень 5.5
+
+Уровень 5.5 При инциденте — слепота           Prometheus + Grafana + Loki
             Нет метрик, нет структурных логов → Уровень 6
 
 Уровень 6   Алерты требуют ручной             AI-агент диагностики
@@ -3899,7 +3902,10 @@ ls playbooks/roles/
 Уровень 7   Configuration drift:              ArgoCD GitOps
             кластер ≠ Git                     → Уровень 8
 
-Уровень 8   Инфраструктура создаётся          Terraform
+Уровень 8   ArgoCD деплоит всё из Git,        Sealed Secrets
+            но секрет в Git = утечка          → Уровень 8.5
+
+Уровень 8.5 Инфраструктура создаётся          Terraform
             руками, не воспроизводимо         → Уровень 9
 
 Уровень 9   Настройка 10+ серверов —          Ansible
@@ -3920,10 +3926,12 @@ ls playbooks/roles/
 | 4a | `git push` → CI/CD | GitHub Actions |
 | 4b | `git push` → GitLab CI | GitLab CE |
 | 5 | `kubectl apply -f k8s/` | kubectl + minikube |
+| 5.5 | `minikube addons enable ingress` + `kubectl apply -f k8s/` | ingress-nginx + cert-manager |
 | 6 | `docker compose up -d` | Prometheus + Grafana |
 | 6.5 | `docker compose up -d agent` (локально, не на VPS) | Claude API |
-| 7 | `helm install bulletin-board ./bulletin-board` | Helm |
+| 7 | `helm install bulletin-board ./bulletin-board -f values-local.yaml` | Helm |
 | 8 | `kubectl apply -f argocd/` | ArgoCD |
+| 8.5 | `bash install-sealed-secrets.sh` + `kubeseal` | Sealed Secrets |
 | 9 | `terraform apply` | Terraform |
 | 10 | `ansible-playbook playbooks/site.yml` | Ansible |
 

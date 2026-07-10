@@ -183,8 +183,10 @@ git push origin main
 |-----------|---------|-------|
 | kubectl | 5 | Управление Kubernetes |
 | minikube | 5 | Локальный K8s |
+| ingress-nginx, cert-manager | 5.5 | Вход в кластер, TLS-сертификаты |
 | Helm | 7 | Пакетный менеджер K8s |
 | ArgoCD CLI | 8 | GitOps деплой |
+| kubeseal | 8.5 | Шифрование секретов для Git |
 | Terraform | 9 | Infrastructure as Code |
 | Ansible | 10 | Fleet provisioning, config management |
 

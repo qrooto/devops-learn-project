@@ -19,6 +19,7 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-bulletin_board}
+      SECRET_KEY: some-other-valu2e
     depends_on:
       postgres:
         condition: service_healthy

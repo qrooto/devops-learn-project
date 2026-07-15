@@ -1761,101 +1761,7 @@ spec:
 
 ---
 
-### Ключевые команды
-
-| Команда | Что делает | Пример |
-|---------|-----------|--------|
-| `helm install` | Установить chart | `helm install bulletin-board ./bulletin-board -f values-prod.yaml` |
-| `helm upgrade` | Обновить релиз | `helm upgrade bulletin-board ./bulletin-board --set backend.image.tag=v1.2.3` |
-| `helm rollback` | Откатить | `helm rollback bulletin-board 1` |
-| `helm list` | Список релизов | `helm list -n bulletin-board` |
-| `helm history` | История релизов | `helm history bulletin-board` |
-| `helm template` | Показать сгенерированные манифесты | `helm template bulletin-board ./bulletin-board` |
-
-### Практика
-
-**Шаг 1 — Изучить структуру chart**
-
-```bash
-cd level-7-helm
-ls bulletin-board/
-# Chart.yaml    — метаданные (имя, версия, описание)
-# values.yaml   — значения по умолчанию
-# templates/    — манифесты с шаблонами: namespace, postgres, redis, backend, nginx
-```
-
-```bash
-cat bulletin-board/templates/backend.yaml
-```
-
-Заметь синтаксис шаблонизатора:
-```yaml
-replicas: {{ .Values.backend.replicas }}
-image: {{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}
-```
-
-**Шаг 2 — Посмотреть что сгенерируется**
-
-```bash
-helm template bulletin-board ./bulletin-board
-helm template bulletin-board ./bulletin-board -f values-prod.yaml
-```
-
-**Шаг 3 — Установить**
-
-```bash
-helm install bulletin-board ./bulletin-board \
-  --namespace bulletin-board \
-  --create-namespace
-
-helm list -n bulletin-board
-kubectl get pods -n bulletin-board
-```
-
-**Шаг 4 — Обновить версию**
-
-```bash
-helm upgrade bulletin-board ./bulletin-board \
-  --set backend.image.tag=v1.2.3
-
-helm history bulletin-board
-```
-
-**Шаг 5 — Blue-Green деплой**
-
-В этом чарте blue-green — не два отдельных Helm-релиза, а один релиз с переключением slot'а через `--set` и точечным патчем Service (полный разбор — `level-7-helm/README.md`, Шаг 7):
-
-```bash
-# Blue уже развёрнут по умолчанию — проверяем
-kubectl get pods -n bulletin-board -l slot=blue
-
-# Создаём green Deployment новым релизом того же чарта с другим слотом
-helm upgrade bulletin-board ./bulletin-board \
-  --set backend.slot=green \
-  --set backend.image.tag=v1.1.0
-
-kubectl rollout status deployment/backend-green -n bulletin-board
-
-# Переключаем трафик на green (меняем Service selector)
-kubectl patch service backend -n bulletin-board \
-  -p '{"spec":{"selector":{"slot":"green"}}}'
-
-# Если всё хорошо — удаляем blue
-kubectl delete deployment backend-blue -n bulletin-board
-
-# Если что-то пошло не так — откат за секунду, обратный patch
-kubectl patch service backend -n bulletin-board \
-  -p '{"spec":{"selector":{"slot":"blue"}}}'
-```
-
-**Преимущество blue-green перед rolling update:** переключение мгновенное (один patch), старая версия работает параллельно и доступна для мгновенного отката.
-
-**Шаг 6 — Откат**
-
-```bash
-helm rollback bulletin 1 -n bulletin-board
-# "1" — номер ревизии. Смотри в helm history.
-```
+> **→ Практика [руки]:** `level-7-helm/README.md` — Шаги 1-9 (установка Helm, разбор чарта, helm template/install/upgrade, история и откат, Blue-Green через слоты, Canary), справочник в шагах.
 
 ---
 
@@ -1863,13 +1769,25 @@ helm rollback bulletin 1 -n bulletin-board
 
 ---
 
+### На собеседовании спросят
+
+**Q: Чем Helm отличается от простого `kubectl apply -f`?**
+A: kubectl apply — применить манифест. Нет версионирования, нет отката, нет параметризации. Helm добавляет: шаблоны (один чарт для dev/prod), историю ревизий, rollback одной командой, управление зависимостями (подчарты).
+
+**Q: Что такое Helm Release и где хранится история?**
+A: Release — экземпляр установленного чарта. История хранится как Kubernetes Secret в том же namespace. `kubectl get secret -l owner=helm` покажет все ревизии.
+
+**Q: В чём разница Blue-Green и Canary?**
+A: Blue-Green: одномоментное переключение всего трафика. Нулевой риск смешанных версий, быстрый rollback, но нет возможности "попробовать на части пользователей". Canary: постепенное переключение (10% → 30% → 100%). Можно поймать проблему на малом трафике до полного rollout. Сложнее в реализации.
+
+**Q: Как Helm управляет зависимостями?**
+A: Через `Chart.yaml → dependencies`. Можно указать что ваш чарт зависит от `postgresql` и `redis` чартов из публичных репозиториев. `helm dependency update` скачает их в `charts/`. При установке всё ставится вместе.
+
+---
+
 ### Итог уровня 7
 
-Ты умеешь:
-- [ ] Создать Helm chart с параметризованными манифестами
-- [ ] Деплоить с разными values для разных окружений
-- [ ] Делать blue-green деплой
-- [ ] Откатить на предыдущую ревизию
+Чеклист умений, Best Practices Checklist и коммит — в `level-7-helm/README.md`. Пройди их перед переходом.
 
 **Боль которую ты чувствуешь:** кто-то вошёл на сервер и вручную изменил ConfigMap — теперь реальное состояние кластера отличается от того что в Git. Обнаруживаешь это случайно через неделю. Нужен инструмент который следит за соответствием → Уровень 8.
 
@@ -1959,91 +1877,45 @@ spec:
 
 ---
 
-### Практика
+### GitOps vs традиционный CI/CD
 
-**Шаг 1 — Установить ArgoCD**
+| | Push-based CI/CD | Pull-based GitOps |
+|--|--|--|
+| Кто деплоит | CI runner (push) | ArgoCD в кластере (pull) |
+| Доступ к K8s | CI нужны credentials | ArgoCD внутри кластера |
+| Drift detection | Нет | Да, автоматически |
+| Rollback | kubectl rollout undo | git revert → автосинк |
+| Аудит | CI logs | Git history |
 
-```bash
-kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+---
 
-# Дождаться пока все Pod-ы поднимутся
-kubectl get pods -n argocd -w
-
-# Получить пароль
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d && echo
-```
-
-**Шаг 2 — Открыть UI**
-
-```bash
-kubectl port-forward svc/argocd-server -n argocd 8080:443
-```
-
-Открой `https://localhost:8080` — admin / <пароль из шага 1>.
-
-**Шаг 3 — Создать приложение**
-
-```bash
-cd level-8-gitops
-# Посмотреть Application manifest (реальный файл этого проекта)
-cat apps/bulletin-board-app.yml
-```
-
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: bulletin-board
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: https://github.com/YOUR_USERNAME/devops-project.git
-    targetRevision: main
-    path: level-5-kubernetes/k8s
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: bulletin-board
-  syncPolicy:
-    automated:
-      prune: true      # удалять ресурсы которых нет в Git
-      selfHeal: true   # восстанавливать изменённые вручную ресурсы
-    syncOptions:
-      - CreateNamespace=true
-```
-
-```bash
-kubectl apply -f apps/bulletin-board-app.yml
-```
-
-**Шаг 4 — Наблюдать автоматическую синхронизацию**
-
-Измени `replicas: 3` на `replicas: 5` в `level-5-kubernetes/k8s/backend/deployment.yml`, закоммить и запушь в Git:
-
-```bash
-git add level-5-kubernetes/k8s/
-git commit -m "scale backend to 5 replicas"
-git push origin main
-```
-
-ArgoCD обнаружит изменение в Git через 3 минуты (или сразу при webhook) и применит его к кластеру.
-
-**Шаг 5 — Наблюдать drift detection**
-
-```bash
-# Вручную измени кластер (так нельзя в production!)
-kubectl scale deployment backend --replicas=1 -n bulletin-board
-
-# Через несколько секунд ArgoCD увидит drift
-# В UI: Status = OutOfSync
-# При selfHeal: автоматически вернёт 5 реплик
-```
+> **→ Практика [руки]:** `level-8-gitops/README.md` — Шаги 1-8 (установка ArgoCD, UI, регистрация репозитория, Application, первая синхронизация, изменение через Git, drift detection, rollback через git revert), «Как GitOps узнаёт о новом образе».
 
 ---
 
 > **Как в проде:** все изменения инфраструктуры идут через PR. Reviewer проверяет `kubectl diff` — что изменится в кластере. После мержа ArgoCD применяет автоматически. В Slack/Telegram уведомление: "ArgoCD: bulletin-board synced, 5 resources updated". Прямые команды `kubectl edit/patch/scale` в production — нарушение процесса.
+
+---
+
+### На собеседовании спросят
+
+**Q: В чём разница Push vs Pull deployment?**
+A: Push (GitHub Actions, GitLab CI): CI-runner подключается к кластеру и применяет изменения. Pull (ArgoCD, Flux): оператор внутри кластера сам тянет изменения из Git.
+
+**Q: Почему GitOps лучше для безопасности?**
+A: CI-runner не нужен доступ к Kubernetes API — не надо хранить куб-конфиг в CI secrets. ArgoCD живёт внутри кластера, имеет ограниченный RBAC.
+
+**Q: Что такое drift в Kubernetes?**
+A: Расхождение между желаемым состоянием (Git/манифесты) и фактическим (кластер). Возникает от ручных изменений. ArgoCD это обнаруживает и исправляет.
+
+**Q: Как ArgoCD обнаруживает изменения в Git?**
+A: Polling (раз в 3 мин по умолчанию) или Webhook от GitHub/GitLab (мгновенно). В prod лучше webhook.
+
+---
+
+### Итог уровня 8
+
+Чеклист умений, Best Practices Checklist и коммит — в `level-8-gitops/README.md`. Пройди их перед переходом.
 
 **Боль которую ты чувствуешь:** ArgoCD деплоит всё что лежит в Git — включая `secret.yml` с паролем открытым текстом. Git — источник правды, но секреты в Git класть нельзя. Противоречие → Уровень 8.5.
 
@@ -2053,19 +1925,66 @@ kubectl scale deployment backend --replicas=1 -n bulletin-board
 
 ### Зачем это нужно
 
-GitOps требует «всё состояние — в Git», безопасность требует «секретов в Git не бывает». Наш `postgres-secret` лежит в репозитории открытым текстом (`stringData`) — для локального minikube это учебный плейсхолдер, для реального проекта — утечка. И помни: base64 в поле `data` — это **кодировка, а не шифрование**, декодируется одной командой.
+На уровне 8 ты сделал Git единственным источником правды: ArgoCD разворачивает всё что лежит в репозитории. И тут же упёрся в противоречие:
 
-**Sealed Secrets** снимает противоречие: в Git хранится SealedSecret — секрет, зашифрованный публичным ключом кластера. Расшифровать его может только контроллер внутри кластера (приватный ключ не покидает кластер). Такой файл можно коммитить даже в публичный репозиторий.
+- **GitOps требует:** всё состояние кластера — в Git, включая Secrets.
+- **Безопасность требует:** секретов в Git быть не должно. Никогда.
+
+Наш `level-5-kubernetes/k8s/postgres/secret.yml` лежит в Git с паролем открытым текстом (`stringData`). Для локального minikube с паролем `postgres` это осознанный учебный плейсхолдер. Для любого реального проекта — утечка: пароль виден всем у кого есть доступ к репо, навсегда остаётся в истории коммитов, попадает в форки и CI-логи.
+
+**Важно раз и навсегда:** `data:` в Secret — это base64, а base64 — **кодировка, не шифрование**. `echo cG9zdGdyZXM= | base64 -d` — и пароль на экране. Кто говорит «у нас секреты закодированы в base64» — не защитил ничего.
+
+**Sealed Secrets** (Bitnami) решает противоречие: в Git лежит **зашифрованный** секрет (SealedSecret), расшифровать который может только контроллер внутри твоего кластера. Публиковать SealedSecret можно хоть в открытом репозитории.
+
+### Аналогия
+
+Sealed Secrets — это почтовый ящик с щелью. **Бросить письмо** (зашифровать секрет публичным ключом) может кто угодно — ключ от щели не нужен. **Достать письмо** (расшифровать) может только владелец ключа от дверцы — контроллер в кластере с приватным ключом. Git в этой аналогии — фотография ящика с письмами внутри: все видят что письма есть, прочитать не может никто.
 
 ### Как это работает
 
-Почтовый ящик с щелью: бросить письмо (зашифровать `kubeseal`-ом) может кто угодно, достать (расшифровать) — только владелец ключа от дверцы (контроллер в кластере). Git — фотография ящика: письма видны, содержимое — нет.
+```
+Твоя машина                              Кластер
+───────────                              ───────
+secret.yml (plain)                       sealed-secrets-controller
+    │                                    (хранит ПРИВАТНЫЙ ключ)
+    │ kubeseal                                ▲
+    │ (шифрует ПУБЛИЧНЫМ ключом кластера)     │ видит SealedSecret,
+    ▼                                         │ расшифровывает,
+sealedsecret.yml ──── git push ──► ArgoCD ──► │ создаёт обычный Secret
+(шифротекст, можно в Git)                     ▼
+                                         Secret (только внутри кластера)
+```
 
-### Практика
+Ключевые факты:
+- `SealedSecret` — это CRD (Custom Resource Definition), кластер узнаёт о нём после установки контроллера.
+- Шифрование асимметричное: публичным ключом можно только зашифровать, расшифровка — только приватным, который не покидает кластер.
+- По умолчанию SealedSecret привязан к **namespace + имени** секрета (strict scope): украсть шифротекст и развернуть его в своём namespace не выйдет.
 
-Полные шаги — `level-8.5-secrets/README.md`: установка контроллера и kubeseal, запечатывание `postgres-secret`, полный GitOps-цикл через ArgoCD, три сценария «сломай намеренно» (чужой namespace, удалённый контроллер, потерянный приватный ключ).
+---
 
-Обзорно там же: **SOPS + age** (шифрование любых файлов в Git) и **External Secrets Operator** (секреты во внешнем хранилище — Vault, cloud Secret Manager; в Git только ссылка).
+> **→ Практика [руки]:** `level-8.5-secrets/README.md` — установка контроллера и kubeseal, запечатывание `postgres-secret`, полный GitOps-цикл через ArgoCD, три сценария «сломай намеренно» (чужой namespace, удалённый контроллер, потерянный приватный ключ). Обзорно там же: **SOPS + age** и **External Secrets Operator**.
+
+---
+
+### На собеседовании спросят
+
+**Q: Секреты в Git хранить нельзя. А GitOps требует всё состояние в Git. Как разрешаете противоречие?**
+A: В Git хранится либо зашифрованный секрет (Sealed Secrets, SOPS) — расшифровать может только кластер/владелец ключа, либо ссылка на секрет во внешнем хранилище (External Secrets Operator + Vault). Plain-text и base64 в Git — недопустимы.
+
+**Q: Чем `data` отличается от `stringData` в Kubernetes Secret? Это шифрование?**
+A: `data` — значения в base64, `stringData` — открытый текст, который API-сервер сам кодирует в base64. Base64 — кодировка, не шифрование: декодируется одной командой. Внутри etcd секреты по умолчанию тоже не зашифрованы (нужен encryption at rest).
+
+**Q: Что будет с SealedSecrets если кластер погиб?**
+A: Без бэкапа приватного ключа контроллера — ничего хорошего: новый кластер генерирует новую пару, старые шифротексты в Git нерасшифруемы. Поэтому ключ бэкапят, либо секреты хранят во внешнем хранилище (ESO) — тогда гибель кластера на них не влияет.
+
+**Q: Можно ли SealedSecret из одного namespace применить в другом?**
+A: В strict-режиме (по умолчанию) нет — шифротекст привязан к namespace и имени Secret. Есть режимы namespace-wide и cluster-wide, но они ослабляют защиту и требуют явной аннотации.
+
+---
+
+### Итог уровня 8.5
+
+Чеклист умений и коммит — в `level-8.5-secrets/README.md`.
 
 **Боль которую ты чувствуешь:** кластер и приложение воспроизводимы из Git, но сама инфраструктура (VM, сети, диски) создана руками и невоспроизводима → Уровень 9.
 

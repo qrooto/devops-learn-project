@@ -595,183 +595,26 @@ Redis — быстрое in-memory хранилище (~0.1ms vs ~10ms у Postgr
 | **Cache MISS** | В Redis пусто — идём в PostgreSQL, результат кладём в кэш |
 | **Cache invalidation** | При изменении данных удаляем ключ из Redis |
 | **TTL** | Время жизни ключа в кэше (у нас 30 секунд) |
+**Почему Redis, а не просто память бэкенда?**
+Три инстанса бэкенда. Если каждый хранит кэш в своей памяти — они несинхронизированы: backend_1 инвалидировал кэш, а backend_2 и backend_3 всё ещё отдают устаревшее. Redis — единое внешнее хранилище, один кэш для всех инстансов.
 
-### Практика
+### Бэкапы — прежде чем оптимизировать дальше
 
-**Шаг 1 — Понять паттерн в коде**
+Мы оптимизируем как данные читаются, но есть вопрос который игнорируют пока не случится катастрофа: **что будет с данными если диск умрёт?** `docker compose down -v` — и всё: объявления, пользователи, история исчезли. Единственная защита — регулярные бэкапы, **проверенные на восстановление**. Бэкап который не проверен — не бэкап.
 
-```bash
-cd level-3-caching
-cat backend/main.py
-```
+**Аналогия:** бэкап — это ксерокопия важного документа. Сам документ может сгореть, но копия остаётся. При этом копию нужно хранить **не в том же здании** — иначе какой смысл. И хотя бы раз прочитать — убедиться что напечатано разборчиво.
 
-Найди функцию `list_ads()`:
-```python
-cached = cache.get("ads:list")      # 1. Проверяем Redis
-if cached:
-    return json.loads(cached)        # 2. HIT — возвращаем без БД
+**Логический vs физический:**
+- `pg_dump` — логический: SQL-дамп «как пересоздать базу». Портабелен между версиями PostgreSQL, человекочитаем; на больших базах медленный.
+- `pg_basebackup` — физический: побайтовая копия файлов кластера. Быстрый на любых размерах, основа для PITR; только та же мажорная версия.
 
-rows = db.execute(...)               # 3. MISS — идём в PostgreSQL
-cache.setex("ads:list", 30, ...)    # 4. Сохраняем на 30 секунд
-```
+**PITR (Point-in-Time Recovery):** pg_dump — снимок в момент времени; бэкап раз в сутки при падении в 23:59 = почти сутки потерянных данных. PostgreSQL ведёт WAL (Write-Ahead Log) — лог всех изменений. Базовый бэкап + WAL-архив = восстановление на любую секунду («хочу базу как вчера в 14:32:47»). Нужен когда потеря даже часа критична или требуется «восстановить до момента когда случайно удалили таблицу».
 
-Найди `create_ad()` — там `cache.delete("ads:list")`. Что произойдёт если убрать эту строку? Как долго новое объявление будет невидимо?
-
-**Шаг 2 — Запустить**
-
-```bash
-docker compose up --build -d
-
-# Проверить Redis
-docker compose exec redis redis-cli ping
-# PONG
-```
-
-**Шаг 3 — Наблюдать кэш в реальном времени**
-
-```bash
-# Терминал 1: мониторинг Redis
-docker compose exec redis redis-cli monitor
-
-# Терминал 2: запросы
-curl -s http://localhost/api/ads > /dev/null  # MISS
-curl -s http://localhost/api/ads > /dev/null  # HIT
-curl -s http://localhost/api/ads > /dev/null  # HIT
-```
-
-В Терминале 1 при MISS видишь:
-```
-GET "ads:list"    → (nil)
-SETEX "ads:list" 30 "[...]"
-```
-При HIT:
-```
-GET "ads:list"    → "[{...}]"
-```
-
-**Шаг 4 — Работать с Redis напрямую**
-
-```bash
-docker compose exec redis redis-cli
-```
-
-```
-KEYS *                     # все ключи
-GET ads:list               # содержимое
-TTL ads:list               # секунд до истечения
-INFO stats                 # keyspace_hits / keyspace_misses
-DEL ads:list               # принудительная инвалидация
-quit
-```
-
-**Задание:** создай объявление через curl, потом проверь `KEYS *`. Ключ `ads:list` должен исчезнуть — инвалидация сработала.
-
-**Шаг 5 — Замерить разницу в скорости**
-
-```bash
-# Прогреть кэш
-curl -s http://localhost/api/ads > /dev/null
-
-# Тест с прогретым кэшем — запиши p95
-k6 run load-tests/cache-test.js
-
-# Сбросить кэш
-docker compose exec redis redis-cli FLUSHALL
-
-# Тест без кэша — сравни p95
-k6 run load-tests/cache-test.js
-```
-
-Ожидаемая разница: p95 в 5-20 раз меньше при прогретом кэше.
-
-**Шаг 6 — Посмотреть hit rate**
-
-```bash
-curl -s http://localhost/api/cache-stats | python3 -m json.tool
-```
-
-```json
-{
-    "hits": 142,
-    "misses": 7,
-    "hit_rate_percent": 95.3
-}
-```
-
-**Хороший hit rate** — 90%+. Это значит 90% запросов не трогают PostgreSQL.
-
-**Шаг 7 — Медленные запросы и индексы**
-
-```bash
-# Включить логирование всех запросов
-docker compose exec postgres psql -U postgres -d bulletin_board -c "
-  ALTER SYSTEM SET log_min_duration_statement = 0;
-  SELECT pg_reload_conf();
-"
-
-# Сбросить кэш и сделать несколько запросов
-docker compose exec redis redis-cli FLUSHALL
-curl -s http://localhost/api/ads > /dev/null
-
-# Посмотреть логи
-docker compose logs postgres | grep "duration"
-# duration: 12.341 ms  statement: SELECT a.id, a.title...
-```
-
-```bash
-# Посмотреть план выполнения запроса
-docker compose exec postgres psql -U postgres -d bulletin_board -c "
-  EXPLAIN ANALYZE
-  SELECT a.id, a.title, a.price, u.username, a.created_at
-  FROM ads a LEFT JOIN users u ON a.user_id = u.id
-  ORDER BY a.created_at DESC;
-"
-```
-
-Ищи в выводе:
-- `Index Scan using ix_ads_created_at` — хорошо, индекс используется
-- `Seq Scan on ads` — плохо, полный перебор таблицы
-
-```bash
-# Сравни что будет без индекса
-docker compose exec postgres psql -U postgres -d bulletin_board -c "
-  DROP INDEX ix_ads_created_at;
-  EXPLAIN ANALYZE SELECT a.id, a.title FROM ads a ORDER BY a.created_at DESC;
-"
-# Теперь: Seq Scan — медленно
-
-# Вернуть индекс
-docker compose exec postgres psql -U postgres -d bulletin_board -c "
-  CREATE INDEX ix_ads_created_at ON ads(created_at DESC);
-"
-```
+**RPO / RTO** — две метрики, которые определяют стратегию: RPO (Recovery Point Objective) — сколько данных по времени допустимо потерять; RTO (Recovery Time Objective) — за сколько сервис обязан восстановиться. Чем меньше RPO — тем чаще бэкап и дороже инфраструктура.
 
 ---
 
-### Что сломать намеренно — Уровень 3
-
-**Поломка 1 — Убрать инвалидацию**
-
-В `backend/main.py` закомментируй `cache.delete("ads:list")` в функции `create_ad()`. Пересобери. Создай объявление — оно не появится в списке ещё 30 секунд (до истечения TTL). Это классическая ошибка которую делают при первом знакомстве с кэшем.
-
-**Диагностика:** `docker compose exec redis redis-cli TTL ads:list` — сколько секунд до обновления.
-
-**Поломка 2 — FLUSHALL в "production"**
-
-Запусти нагрузочный тест. В другом терминале выполни `docker compose exec redis redis-cli FLUSHALL`. Смотри на k6 — всплеск latency (все запросы пошли в PostgreSQL одновременно). Это "thundering herd" — гром стада.
-
-**Диагностика:** `docker stats` — CPU postgres резко вырастет в момент FLUSHALL.
-
-**Поломка 3 — Redis упал**
-
-```bash
-docker compose stop redis
-curl -s http://localhost/api/ads
-# Что произошло? Зависит от graceful degradation в коде
-docker compose logs backend | tail -20
-```
-
-Если в коде нет try/except вокруг Redis — сервис упадёт. Если есть — сервис деградирует (работает медленнее но не падает). **Урок:** кэш — не критичная часть архитектуры, сервис должен работать без него.
+> **→ Практика [руки]:** `level-3-caching/README.md` — Шаги 1-9 (наблюдать кэш через redis-cli monitor, замерить разницу p95, hit rate, EXPLAIN ANALYZE и индексы, полный цикл бэкапа: дамп → restore drill → скрипт с ротацией), «Что сломать намеренно» (убрать инвалидацию, FLUSHALL под нагрузкой, убить Redis, restore поверх непустой базы), справочник команд.
 
 ---
 
@@ -779,47 +622,34 @@ docker compose logs backend | tail -20
 
 ---
 
-### Справочник команд — Уровень 3
-
-| Команда | Описание |
-|---------|---------|
-| `docker compose exec redis redis-cli ping` | Проверить Redis |
-| `docker compose exec redis redis-cli monitor` | Все команды в реальном времени |
-| `docker compose exec redis redis-cli KEYS '*'` | Все ключи |
-| `docker compose exec redis redis-cli GET ads:list` | Значение ключа |
-| `docker compose exec redis redis-cli TTL ads:list` | Время жизни ключа |
-| `docker compose exec redis redis-cli INFO stats` | Статистика hits/misses |
-| `docker compose exec redis redis-cli FLUSHALL` | Очистить весь кэш (только dev!) |
-| `EXPLAIN ANALYZE SELECT ...` | План выполнения запроса в PostgreSQL |
-| `ALTER SYSTEM SET log_min_duration_statement = 100` | Логировать запросы дольше 100ms |
-
 ### На собеседовании спросят
 
-**Q: Что такое cache invalidation и почему это сложно?**
-A: Инвалидация — удаление устаревших данных из кэша. Сложность: нужно знать в точности когда данные изменились. Наш подход (delete при write) прост, но при высокой конкурентности возникает thundering herd — сотни запросов одновременно уходят в БД после инвалидации.
+**Q: Что такое cache invalidation и почему это одна из двух сложных проблем в CS?**
+A: Инвалидация — удаление устаревших данных из кэша. Сложность: надо знать когда данные изменились. Наш подход (delete при write) прост, но при высокой конкурентности возникает "thundering herd" — сотни запросов одновременно уходят в БД после инвалидации.
 
 **Q: Чем Redis отличается от Memcached?**
-A: Redis: персистентность, структуры данных (hash, list, set, sorted set), pub/sub, cluster, Lua. Memcached: только простой key-value, нет персистентности, чуть быстрее для простого случая. Сегодня Redis используют везде.
+A: Redis: персистентность (RDB/AOF), структуры данных (hash, list, set, sorted set), pub/sub, Lua scripting, cluster. Memcached: проще, быстрее при простом key-value, нет персистентности. Для большинства задач Redis.
 
-**Q: Что такое thundering herd?**
-A: Истёк популярный ключ в кэше. 1000 параллельных запросов увидели Cache MISS и все пошли в БД. База получила 1000 одинаковых запросов. Решение: mutex lock — первый запрос идёт в БД, остальные ждут результата.
+**Q: Что такое TTL и как выбрать правильное значение?**
+A: Time To Live — время жизни ключа. Слишком маленькое: много Cache MISS, не даёт эффекта. Слишком большое: устаревшие данные. Выбор зависит от частоты изменений: для списка объявлений 30-60с нормально, для котировок акций — 1с.
 
-**Q: Чем pg_dump отличается от pg_basebackup?**
-A: pg_dump — логический бэкап: SQL-команды для воссоздания структуры и данных. Портабелен, можно восстановить на другой версии PostgreSQL. pg_basebackup — физический бэкап: побайтовая копия файлов данных. Быстрее для больших баз, нужен для PITR (Point-in-Time Recovery). Для большинства задач используют pg_dump с `--format=custom` — позволяет выборочное восстановление таблиц.
+**Q: Как работает LRU eviction в Redis?**
+A: При `maxmemory-policy allkeys-lru` Redis при нехватке памяти удаляет давно неиспользуемые ключи (Least Recently Used). Это нормальное поведение кэша — горячие данные остаются, холодные вытесняются.
 
-**Q: Что такое RPO и RTO?**
-A: RPO (Recovery Point Objective) — максимально допустимая потеря данных по времени. "Если база упала, сколько данных можем потерять?" При бэкапе раз в сутки — RPO=24h. RTO (Recovery Time Objective) — сколько времени допустимо для восстановления. "Через сколько минут сервис должен снова работать?" Эти метрики определяют стратегию бэкапов: чем меньше RPO — тем чаще бэкап и дороже.
+**Q: Что такое "thundering herd" при инвалидации кэша?**
+A: Кэш для популярного ключа истёк одновременно. 1000 параллельных запросов увидели Cache MISS и все пошли в БД. База получила 1000 одинаковых запросов вместо одного. Решение: mutex lock на первый запрос, остальные ждут результата.
+
+**Q: Чем `pg_dump` отличается от `pg_basebackup`?**
+A: `pg_dump` — логический бэкап: SQL-дамп конкретной базы в момент времени. Можно восстановить в другую версию PostgreSQL, на другую схему. `pg_basebackup` — физическая копия всего кластера (все базы, WAL). Используется для PITR и настройки репликации. Для ежедневных бэкапов — `pg_dump`. Для disaster recovery с минимальным RPO — `pg_basebackup` + WAL-архивирование.
+
+**Q: Что такое RPO и RTO, и как они связаны с бэкапами?**
+A: RPO (Recovery Point Objective) — максимально допустимая потеря данных по времени. Бэкап раз в сутки → RPO = 24 часа (потеряешь до суток данных при катастрофе). RTO (Recovery Time Objective) — максимально допустимое время восстановления. Большой бэкап и медленный диск → высокий RTO. Эти метрики определяют требования к бэкап-стратегии.
+
+---
 
 ### Итог уровня 3
 
-Ты умеешь:
-- [ ] Реализовать cache-aside pattern (check → miss → load → store)
-- [ ] Инвалидировать кэш при изменении данных
-- [ ] Читать статистику Redis и понимать hit rate
-- [ ] Объяснить EXPLAIN ANALYZE и Seq Scan vs Index Scan
-- [ ] Создать pg_dump бэкап и протестировать восстановление в отдельную БД
-- [ ] Написать скрипт ротации бэкапов с cron
-- [ ] Объяснить разницу RPO и RTO и как они влияют на стратегию бэкапов
+Чеклист умений, Best Practices Checklist и коммит — в `level-3-caching/README.md`. Пройди их перед переходом.
 
 **Боль которую ты чувствуешь:** при деплое новой версии бэкенда надо остановить все три инстанса — сервис недоступен несколько секунд (или минут). Нужен автоматический деплой без даунтайма → Уровень 4.
 

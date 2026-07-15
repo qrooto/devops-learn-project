@@ -538,127 +538,7 @@ upstream backend {
 
 **Осторожно с POST:** `proxy_next_upstream non_idempotent` позволяет retry для POST. Опасно — запрос может выполниться дважды (два созданных объявления). Включай только если бэкенд использует идемпотентный ключ для защиты.
 
----
-
-### Ключевые команды
-
-| Команда | Что делает | Пример |
-|---------|-----------|--------|
-| `docker compose up --scale backend=3` | Запустить 3 копии (если настроено) | — |
-| `docker compose stop backend_2` | Остановить конкретный инстанс | `docker compose stop backend_2` |
-| `docker compose start backend_2` | Запустить обратно | `docker compose start backend_2` |
-| `docker compose exec backend_1 ps aux` | Процессы внутри инстанса | — |
-| `docker compose exec postgres psql ... -c "SELECT count(*), state FROM pg_stat_activity..."` | Коннекты к БД | — |
-
-### Практика
-
-**Шаг 1 — Разобрать конфиг перед запуском**
-
-```bash
-cd level-2-scaling
-cat nginx/nginx.conf
-```
-
-Найди блок `upstream backend` — три сервера перечислены явно. Найди `proxy_next_upstream error timeout` — что будет если backend_2 упадёт прямо во время запроса?
-
-**Шаг 2 — Запустить**
-
-```bash
-docker compose up --build -d
-docker compose ps
-```
-
-Ожидаешь увидеть 5 контейнеров: nginx, postgres, backend_1, backend_2, backend_3.
-
-**Шаг 3 — Убедиться что балансировка работает**
-
-```bash
-for i in $(seq 1 9); do
-  curl -s http://localhost/api/instance \
-    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['instance_id'])"
-done
-```
-
-Увидишь чередование: backend_1, backend_2, backend_3, backend_1... Это round-robin.
-
-**Шаг 4 — Проверить что JWT работает на любом инстансе**
-
-```bash
-# Токен создан на backend_1 (возможно), но проверяется на backend_2 и backend_3
-TOKEN=$(curl -s -X POST http://localhost/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"alice","password":"secret123"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-
-# Создать 3 объявления — каждый запрос попадёт на другой инстанс
-for i in 1 2 3; do
-  curl -s -X POST http://localhost/api/ads \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $TOKEN" \
-    -d "{\"title\":\"Объявление $i\",\"description\":\"Тест\",\"price\":$((i*100))}" \
-    | python3 -m json.tool
-done
-```
-
-Все три создались — JWT проверяется на разных инстансах, потому что `SECRET_KEY` одинаковый.
-
-**Шаг 5 — Убить инстанс под нагрузкой (ключевая демонстрация)**
-
-```bash
-# Терминал 1: нагрузочный тест
-k6 run load-tests/balancer-test.js
-
-# Терминал 2: убиваем backend_2 ПОКА ТЕСТ РАБОТАЕТ
-docker compose stop backend_2
-```
-
-Наблюдай в Терминале 1: кратковременный всплеск ошибок (1-2 секунды) — потом нормализуется. Nginx перестал посылать запросы на упавший инстанс.
-
-```bash
-# Вернуть инстанс
-docker compose start backend_2
-```
-
-После запуска Nginx автоматически снова включит его в ротацию.
-
-**Шаг 6 — Сравнить с Уровнем 1**
-
-```bash
-# Два терминала:
-docker stats          # Терминал 1
-k6 run load-tests/stress.js  # Терминал 2
-```
-
-Смотри: нагрузка CPU распределяется между backend_1/2/3. Но CPU у postgres растёт. Три инстанса = в три раза больше запросов к базе. PostgreSQL один — он становится новым узким местом.
-
----
-
-### Что сломать намеренно — Уровень 2
-
-**Поломка 1 — Разные SECRET_KEY на инстансах**
-
-В `docker-compose.yml` добавь `SECRET_KEY` в `environment:` у `backend_2` со значением, отличным от остальных (по умолчанию везде используется одно и то же `dev-only-change-in-production` из `auth.py`, в файле переменная не задана). Запусти. Залогинься (токен выдан на backend_1 или backend_3). Потом делай запросы — каждый третий будет падать с 401, когда попадёт на backend_2.
-
-**Диагностика:**
-```bash
-docker compose logs backend_2 | grep -i "invalid\|signature\|error"
-# JWTError: Signature verification failed
-```
-
-**Поломка 2 — Отключить proxy_next_upstream**
-
-Закомментируй строку `proxy_next_upstream error timeout;` в nginx.conf. Перезапусти nginx: `docker compose restart nginx`. Убей backend_2. Запусти k6. Теперь каждый третий запрос попадает на мёртвый сервер и получает 502 — без retry.
-
-**Диагностика:** `docker compose logs nginx | grep 502`
-
-**Поломка 3 — Исчерпать пул соединений к БД**
-
-В `backend/main.py` измени `pool_size=5` на `pool_size=1`. Пересобери. Запусти стресс-тест. При высокой нагрузке увидишь `QueuePool limit of size 1 overflow 10 reached`.
-
-```bash
-docker compose exec postgres psql -U postgres -d bulletin_board \
-  -c "SELECT count(*), state FROM pg_stat_activity WHERE datname='bulletin_board' GROUP BY state;"
-```
+> **→ Практика [руки]:** `level-2-scaling/README.md` — Шаги 1-8 (запуск трёх инстансов, проверка round-robin, JWT на разных инстансах, убить инстанс под нагрузкой, стресс-тест), «Что сломать намеренно» (разные SECRET_KEY, отключить proxy_next_upstream, исчерпать пул БД), справочник команд.
 
 ---
 
@@ -666,24 +546,28 @@ docker compose exec postgres psql -U postgres -d bulletin_board \
 
 ---
 
-### Справочник команд — Уровень 2
+### На собеседовании спросят
 
-| Команда | Описание |
-|---------|---------|
-| `docker compose ps` | Статус всех инстансов |
-| `docker compose stop backend_2` | Выключить один инстанс |
-| `docker compose start backend_2` | Включить обратно |
-| `docker compose logs backend_1 backend_2 backend_3 \| grep -i error` | Только ошибки |
-| `curl -s http://localhost/api/instance` | Какой инстанс ответил |
-| `docker compose exec postgres psql -U postgres -d bulletin_board -c "SELECT ..."` | Запрос к БД |
+**Q: В чём разница между горизонтальным и вертикальным масштабированием?**
+A: Вертикальное (scale up) — добавить CPU/RAM существующему серверу. Ограничено железом, дорого. Горизонтальное (scale out) — добавить новые инстансы. Теоретически неограниченно, требует stateless архитектуры.
+
+**Q: Что такое stateless архитектура и почему она важна?**
+A: Stateless — каждый запрос содержит всю необходимую информацию, сервер не хранит состояние между запросами. JWT — stateless auth. Session cookie — stateful (сервер должен помнить сессию). Stateless можно масштабировать горизонтально без проблем.
+
+**Q: Как Nginx определяет что бэкенд упал?**
+A: passive health check: если бэкенд вернул ошибку или не ответил — Nginx помечает его как unavailable на `fail_timeout` (по умолчанию 10s). Есть также active health check (проверяет `/health` регулярно) — только в NGINX Plus или с модулем.
+
+**Q: Какой алгоритм балансировки используется по умолчанию в Nginx?**
+A: Round-robin — каждый следующий запрос на следующий сервер. Альтернативы: `least_conn` (на наименее загруженный), `ip_hash` (один клиент всегда на один сервер — нужно для stateful сессий), `random`.
+
+**Q: Почему SECRET_KEY должен быть одинаковым на всех инстансах?**
+A: JWT — это подписанный токен. Подпись проверяется с тем же ключом которым создавалась. Если инстансы имеют разные ключи — токен созданный на instance_1 будет отклонён instance_2 с "Invalid signature".
+
+---
 
 ### Итог уровня 2
 
-Ты умеешь:
-- [ ] Настроить Nginx upstream с несколькими серверами
-- [ ] Убить контейнер под нагрузкой и наблюдать failover
-- [ ] Объяснить почему JWT работает при scale-out а сессии в памяти — нет
-- [ ] Находить узкое место после решения предыдущего
+Чеклист умений, Best Practices Checklist и коммит — в `level-2-scaling/README.md`. Пройди их перед переходом.
 
 **Боль которую ты чувствуешь:** при 100 RPS три инстанса делают 100 запросов к PostgreSQL. При `GET /api/ads` каждый раз — JOIN + ORDER BY + весь список. PostgreSQL задыхается. Кэширование → Уровень 3.
 

@@ -1322,200 +1322,7 @@ spec:
 
 ---
 
-### Ключевые команды
-
-| Команда | Что делает | Пример |
-|---------|-----------|--------|
-| `kubectl get pods` | Список Pod-ов | `kubectl get pods -n bulletin-board` |
-| `kubectl describe pod <name>` | Детали Pod — события, статус | `kubectl describe pod backend-xxx` |
-| `kubectl logs <pod>` | Логи Pod | `kubectl logs backend-xxx -f` |
-| `kubectl exec -it <pod> -- bash` | Зайти внутрь | `kubectl exec -it backend-xxx -- bash` |
-| `kubectl apply -f <file>` | Применить манифест | `kubectl apply -f k8s/backend.yaml` |
-| `kubectl delete pod <name>` | Удалить Pod (K8s пересоздаст) | `kubectl delete pod backend-xxx` |
-| `kubectl scale deployment backend --replicas=5` | Масштабировать | — |
-| `kubectl rollout status deployment/backend` | Статус rolling update | — |
-| `kubectl rollout undo deployment/backend` | Откат на предыдущую версию | — |
-
-### Практика
-
-**Шаг 1 — Установить minikube и kubectl**
-
-```bash
-# kubectl
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-kubectl version --client
-
-# minikube
-curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-sudo install minikube-linux-amd64 /usr/local/bin/minikube
-minikube version
-```
-
-**Шаг 2 — Запустить кластер**
-
-```bash
-minikube start --driver=docker --memory=4096 --cpus=2
-minikube status
-kubectl get nodes
-```
-
-```
-NAME       STATUS   ROLES           AGE   VERSION
-minikube   Ready    control-plane   1m    v1.31.x
-```
-
-**Шаг 3 — Разобрать манифесты**
-
-```bash
-cd level-5-kubernetes
-find k8s -type f
-# k8s/namespace.yml
-# k8s/postgres/{deployment,service,pvc,secret}.yml
-# k8s/redis/{deployment,service}.yml
-# k8s/backend/{deployment,service,configmap,hpa}.yml
-# k8s/nginx/{deployment,service,configmap}.yml
-```
-Манифесты разложены по подпапкам на сервис, не одним плоским списком файлов, и расширение `.yml`, не `.yaml`. Отдельного `ingress.yml` нет — см. заметку про Ingress выше.
-
-Прочитай `k8s/backend/deployment.yml`:
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: backend
-spec:
-  replicas: 3              # три копии
-  selector:
-    matchLabels:
-      app: backend
-  template:
-    spec:
-      containers:
-      - name: backend
-        image: bulletin-board-backend:latest
-        resources:
-          requests:           # гарантированные ресурсы
-            memory: "64Mi"
-            cpu: "50m"
-          limits:             # максимум
-            memory: "256Mi"
-            cpu: "500m"
-        readinessProbe:       # "готов ли принимать трафик?"
-          httpGet:
-            path: /api/health
-            port: 8000
-          initialDelaySeconds: 10
-        livenessProbe:        # "жив ли процесс?"
-          httpGet:
-            path: /api/health
-            port: 8000
-```
-
-**Шаг 4 — Задеплоить**
-
-```bash
-# Собрать образ в контексте minikube (backend всё тот же код, что и на предыдущих уровнях)
-eval $(minikube docker-env)
-docker build -t bulletin-board-backend:latest ../level-3-caching/backend
-
-# Применить все манифесты (по подпапкам, порядок не важен — k8s сам разберётся с зависимостями)
-kubectl apply -f k8s/ --recursive
-
-# Следить за созданием Pod-ов
-kubectl get pods -n bulletin-board -w
-```
-
-```
-NAME                       READY   STATUS    RESTARTS
-backend-7d9f8b6c4-abc12    0/1     Pending   0
-backend-7d9f8b6c4-abc12    0/1     Running   0
-backend-7d9f8b6c4-abc12    1/1     Running   0    ← Pod готов!
-```
-
-**Шаг 5 — Self-healing в действии**
-
-```bash
-# Смотреть за Pod-ами
-kubectl get pods -n bulletin-board -w
-
-# В другом терминале — удалить Pod
-kubectl delete pod <имя-одного-pod> -n bulletin-board
-```
-
-Видишь: Pod удаляется, Deployment мгновенно создаёт новый. Это и есть self-healing.
-
-**Шаг 6 — Rolling update**
-
-```bash
-# Обновить версию образа
-kubectl set image deployment/backend backend=bulletin-board-backend:v2 -n bulletin-board
-
-# Смотреть как обновляется (по одному Pod за раз)
-kubectl rollout status deployment/backend -n bulletin-board
-
-# Если что-то пошло не так:
-kubectl rollout undo deployment/backend -n bulletin-board
-```
-
-**Шаг 7 — Horizontal Pod Autoscaler**
-
-```bash
-# Применить HPA (масштабировать от 2 до 10 Pod при CPU > 50%)
-kubectl apply -f k8s/hpa.yaml
-
-# Проверить
-kubectl get hpa -n bulletin-board
-
-# Нагрузочный тест
-k6 run load-tests/stress.js
-
-# Наблюдать как K8s добавляет Pod-ы
-kubectl get pods -n bulletin-board -w
-```
-
----
-
-### Что сломать намеренно — Уровень 5
-
-**Поломка 1 — CrashLoopBackOff**
-
-В манифесте `backend.yaml` измени command на несуществующий: `command: ["python3", "nonexistent.py"]`. Примени. Смотри:
-
-```bash
-kubectl get pods -n bulletin-board
-# STATUS: CrashLoopBackOff
-
-kubectl describe pod <name> -n bulletin-board
-# Events: Back-off restarting failed container
-
-kubectl logs <name> -n bulletin-board --previous
-# Error: can't open file 'nonexistent.py'
-```
-
-K8s будет перезапускать с экспоненциальным backoff (10с, 20с, 40с...). Верни манифест и применяй снова.
-
-**Поломка 2 — Resource limits**
-
-Установи `limits.memory: "10Mi"` — слишком мало для Python. Примени. Pod будет получать `OOMKilled`:
-
-```bash
-kubectl describe pod <name> -n bulletin-board
-# Reason: OOMKilled
-# Exit Code: 137
-```
-
-**Поломка 3 — Liveness probe убивает Pod**
-
-Измени `livenessProbe.path` на `/api/nonexistent`. Примени. Pod будет регулярно рестартовать потому что probe всегда падает:
-
-```bash
-kubectl get pods -n bulletin-board
-# RESTARTS: 5
-
-kubectl describe pod <name> -n bulletin-board
-# Warning  Unhealthy  Liveness probe failed: HTTP probe failed with statuscode: 404
-```
+> **→ Практика [руки]:** `level-5-kubernetes/README.md` — Шаги 1-13 (minikube, деплой манифестов, self-healing, probes, ConfigMap/Secret, rolling update, HPA, OOM в K8s, Blue-Green, Canary), «Что сломать намеренно» (CrashLoopBackOff, OOMKilled по лимиту, liveness probe убивает Pod), FAQ про базу в кластере, справочник kubectl.
 
 ---
 
@@ -1523,47 +1330,46 @@ kubectl describe pod <name> -n bulletin-board
 
 ---
 
-### Справочник команд — Уровень 5
-
-| Команда | Описание |
-|---------|---------|
-| `kubectl get pods -n bulletin-board` | Список Pod-ов |
-| `kubectl get pods -n bulletin-board -w` | Следить за изменениями |
-| `kubectl describe pod <name> -n bulletin-board` | Детальная информация + события |
-| `kubectl logs <pod> -n bulletin-board -f` | Логи в реальном времени |
-| `kubectl logs <pod> -n bulletin-board --previous` | Логи упавшего Pod |
-| `kubectl exec -it <pod> -n bulletin-board -- bash` | Зайти внутрь |
-| `kubectl apply -f k8s/` | Применить все манифесты |
-| `kubectl delete pod <name> -n bulletin-board` | Удалить Pod (пересоздастся) |
-| `kubectl scale deployment backend --replicas=5 -n bulletin-board` | Ручное масштабирование |
-| `kubectl rollout status deployment/backend -n bulletin-board` | Статус деплоя |
-| `kubectl rollout undo deployment/backend -n bulletin-board` | Откат |
-| `kubectl get hpa -n bulletin-board` | Autoscaler |
-| `kubectl top pods -n bulletin-board` | CPU/RAM Pod-ов |
-| `minikube dashboard` | Веб-интерфейс |
-
 ### На собеседовании спросят — Уровень 5
 
-**Q: В чём разница Rolling Update, Blue-Green и Canary?**
-A: Rolling: обновляет Pod-ы по одному, v1 и v2 параллельно, откат = новый деплой (медленно). Blue-Green: два полных окружения, мгновенный switch selector, мгновенный rollback, но двойные ресурсы. Canary: 10-20% трафика на новую версию, градуальное увеличение — минимальный риск для пользователей.
+**Q: Почему Postgres у вас Deployment, а не StatefulSet? Когда нужен StatefulSet?**
+A: Одна реплика + один PVC — гарантии StatefulSet ничего не добавляют. StatefulSet нужен при нескольких stateful-репликах: стабильные имена/DNS (postgres-0, postgres-1), свой PVC на реплику (volumeClaimTemplates), упорядоченный rollout — без этого не построить репликацию primary/standby. В проде базу чаще выносят в managed DB (см. FAQ выше).
 
-**Q: Как реализовать Blue-Green в Kubernetes?**
-A: Два Deployment с labels `slot=blue` и `slot=green`. Service selector — `{slot: blue}`. При деплое создать green, дождаться readiness, `kubectl patch service` → `slot=green`. Rollback = patch обратно.
+**Q: В чём разница между Pod, Deployment и ReplicaSet?**
+A: Pod — один экземпляр приложения (1-2 контейнера). ReplicaSet — следит что работает N Pod. Deployment — управляет ReplicaSet, добавляет rolling update и история ревизий. В обычной работе работают только с Deployment, ReplicaSet и Pod создаются автоматически.
+
+**Q: Что такое readiness probe и зачем она нужна?**
+A: HTTP-запрос (или TCP, или команда) который K8s делает к Pod перед тем как направить на него трафик. Пока probe не пройдена — Pod в статусе `not ready` и Service не посылает на него запросы. Это решает проблему "трафик пришёл а приложение ещё не инициализировалось".
+
+**Q: Что такое OOMKilled в Kubernetes и почему это не всегда катастрофа?**
+A: OOMKilled — Pod превысил `resources.limits.memory`, ядро Linux отправило SIGKILL (exit code 137). Kubernetes автоматически пересоздаёт Pod. Это не катастрофа если происходит редко — плохо если `RESTARTS` растёт постоянно: значит лимит занижен или есть утечка памяти. В норме `RESTARTS: 0` у всех Pod-ов.
+
+**Q: Как работает HPA?**
+A: Раз в 15 секунд HPA запрашивает metrics-server, сравнивает текущее использование CPU/memory с целевым (`targetCPUUtilizationPercentage`). Если превышено — добавляет реплики (до `maxReplicas`). Scale down медленнее: ждёт 5 минут стабильно низкой нагрузки.
+
+**Q: Зачем Namespace?**
+A: Изолированное пространство имён внутри кластера. В одном кластере могут жить dev/staging/prod в разных namespace. Политики, RBAC, resource quotas применяются на уровне namespace. В нашем проекте `bulletin-board` — namespace для изоляции от других приложений.
+
+**Q: Чем K8s Secret отличается от ConfigMap?**
+A: ConfigMap — открытые данные (URL, порты, feature flags). Secret — чувствительные данные (пароли, токены). Технически Secret хранится в base64 (не зашифрован по умолчанию!) — разница больше семантическая и в access control (RBAC).
+
+**Q: В чём разница Rolling Update, Blue-Green и Canary?**
+A: Rolling: обновляет Pod-ы по одному, две версии работают одновременно, откат = новый деплой (медленно). Blue-Green: два полных окружения, переключение selector = мгновенный откат, удвоение ресурсов. Canary: малый процент трафика на новую версию, безопасное тестирование на реальных пользователях, градуальное увеличение.
+
+**Q: Как реализовать Blue-Green в Kubernetes без платных инструментов?**
+A: Два Deployment (backend-blue, backend-green). Service с selector `{app: backend, color: blue}`. При деплое: создаём green Deployment, ждём readiness, переключаем selector: `kubectl patch service`. Rollback: patch обратно на blue. Минута работы.
+
+**Q: Как canary deployment защищает от инцидентов?**
+A: При gradual rollout (canary replicas=1, stable=4) только 20% пользователей попадают на новую версию. Если новая версия деградирует — это видно на метриках canary Pod-ов до того как затронет всех. Rollback = `kubectl delete deployment backend-canary`. Без canary: инцидент затрагивает 100% сразу.
 
 **Q: Как реализовать Canary через K8s без ingress-controller?**
 A: Два Deployment, оба с label `app=backend`. Service выбирает всех по этому label. Пропорция реплик = пропорция трафика: `stable replicas=4, canary replicas=1` → 80/20. Graduate: обновить stable на v2, удалить canary.
 
+---
+
 ### Итог уровня 5
 
-Ты умеешь:
-- [ ] Создавать Deployment, Service, ConfigMap, Secret
-- [ ] Читать диагностику Pod-ов (logs, describe, exec)
-- [ ] Наблюдать self-healing в реальном времени
-- [ ] Делать rolling update и откатывать его
-- [ ] Настроить HPA для автомасштабирования
-- [ ] Разбирать CrashLoopBackOff и OOMKilled
-- [ ] Выполнить Blue-Green деплой и мгновенный rollback через selector
-- [ ] Выполнить Canary: 20% трафика, наблюдение метрик, graduate или rollback
+Чеклист умений, Best Practices Checklist и коммит — в `level-5-kubernetes/README.md`. Пройди их перед переходом.
 
 **Боль которую ты чувствуешь:** наружу торчит NodePort на порту 30080 — нестандартный порт, нет TLS, по порту на каждый будущий сервис. В реальных кластерах вход устроен иначе → Уровень 5.5.
 
@@ -1579,9 +1385,7 @@ NodePort — «чёрный ход» для отладки: нестандарт
 
 Ingress-ресурс — только правила («кого куда провожать»); исполняет их ingress-контроллер (у нас ingress-nginx). NodePort — служебные двери с номерами по периметру здания, Ingress — ресепшн у главного входа: все заходят через одну дверь, называют кого ищут (Host), их провожают.
 
-### Практика
-
-Полные шаги — `level-5.5-ingress/README.md`: включение ingress-nginx, перевод nginx-сервиса NodePort → ClusterIP, Ingress с маршрутизацией по Host, установка cert-manager с двумя issuer-ами (selfsigned для minikube, letsencrypt-staging для сервера с публичным доменом), и три поломки с разными симптомами (404 / пустой ADDRESS / 503).
+> **→ Практика [руки]:** `level-5.5-ingress/README.md` — включение ingress-nginx, перевод nginx-сервиса NodePort → ClusterIP, Ingress с маршрутизацией по Host, установка cert-manager с двумя issuer-ами (selfsigned для minikube, letsencrypt-staging для сервера с публичным доменом), и три поломки с разными симптомами (404 / пустой ADDRESS / 503).
 
 **Боль которую ты чувствуешь:** при инциденте ты слепой. Не видно что происходит внутри кластера: сколько запросов, какое время ответа, где ошибки. Нужен мониторинг → Уровень 6.
 

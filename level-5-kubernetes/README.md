@@ -1,53 +1,7 @@
 # Уровень 5 — Kubernetes (minikube)
 
-> **Тип сессии:** разделы «Зачем», «Аналогия», «Как это работает», «На собеседовании спросят», Security Block — **[голова]**: можно читать в дороге, без терминала. Шаги с командами, «Что сломать намеренно», Troubleshooting на живой поломке — **[руки]**: нужна домашняя сессия с VM. Легенда — в START_HERE.md.
-
-## Зачем начинать отсюда?
-
-Docker Compose — отличный инструмент для разработки. Но в production у него есть принципиальные ограничения:
-
-- **Нет self-healing:** упал контейнер — надо идти и перезапускать вручную
-- **Нет автомасштабирования:** нагрузка выросла втрое — добавляй инстансы руками
-- **Нет управления ресурсами:** один контейнер может съесть всю RAM, положив остальные
-- **Rolling update — сделал сам:** в Docker Compose это набор bash-скриптов, в K8s — встроено
-- **Нет самовосстановления:** если сервер перезагрузился, кто запустит контейнеры?
-
-**Kubernetes** решает всё это системно. Это не просто "Docker Compose++", это другой уровень абстракции — ты описываешь желаемое состояние кластера, K8s делает всё остальное.
-
-## Аналогия
-
-Docker Compose — ты сам управляешь каждым работником: кого нанять, уволить, сколько платить.
-Kubernetes — HR-отдел с автоматизацией: сам набирает если кто-то заболел, сам масштабирует при наплыве задач, сам следит за ресурсами.
-
-## Ключевые концепции
-
-```
-┌─────────────── Cluster ────────────────────┐
-│                                            │
-│  ┌──── Node (VM/server) ──────────────┐   │
-│  │                                    │   │
-│  │  Pod (1+ контейнеров вместе)       │   │
-│  │    └── Container: backend          │   │
-│  │                                    │   │
-│  │  Pod                               │   │
-│  │    └── Container: postgres         │   │
-│  └────────────────────────────────────┘   │
-│                                            │
-│  Deployment → управляет Pod (replicas)    │
-│  Service    → стабильный DNS для Pod      │
-│  ConfigMap  → конфигурация (не секреты)   │
-│  Secret     → пароли, токены              │
-│  HPA        → автомасштабирование Pod     │
-└────────────────────────────────────────────┘
-```
-
-**Pod vs Container:** Pod — обёртка вокруг контейнера(ов). Контейнеры в одном Pod делят сеть и volumes. Обычно 1 контейнер = 1 Pod.
-
-**Deployment vs Pod:** Никогда не создавай Pod напрямую. Deployment — это "хочу 3 копии этого Pod". Если Pod умрёт — Deployment пересоздаст его.
-
-**Service:** Pod-ы эфемерны — IP меняется при каждом пересоздании. Service — стабильный DNS-адрес (`backend.bulletin-board.svc.cluster.local`) который всегда указывает на живые Pod-ы.
-
----
+> **Это [руки]** — практический маршрут уровня: команды, эксперименты, поломки. Нужна сессия с VM (4GB+ RAM для minikube).
+> **Теория уровня — в `CURRICULUM.md` → «Уровень 5»**: зачем Kubernetes, ключевые концепции (Pod/Deployment/Service/ConfigMap/Secret/HPA), полная анатомия манифестов, вопросы с собеседований. Здесь она не дублируется. Легенда `[голова]`/`[руки]` — в START_HERE.md.
 
 ## Шаг 1 — Установить minikube и kubectl
 
@@ -454,6 +408,49 @@ kubectl get pods -n bulletin-board
 **Главный вывод:**
 
 OOMKilled в K8s — не фатальная ошибка, Pod пересоздаётся. Но нарастающий `RESTARTS` — тревожный сигнал. В Level 6 мы добавим мониторинг на `kube_pod_container_status_restarts_total` и алерт когда `RESTARTS > 5 за 10 минут`.
+
+---
+
+## Что сломать намеренно — Уровень 5
+
+**Поломка 1 — CrashLoopBackOff**
+
+В манифесте `backend.yaml` измени command на несуществующий: `command: ["python3", "nonexistent.py"]`. Примени. Смотри:
+
+```bash
+kubectl get pods -n bulletin-board
+# STATUS: CrashLoopBackOff
+
+kubectl describe pod <name> -n bulletin-board
+# Events: Back-off restarting failed container
+
+kubectl logs <name> -n bulletin-board --previous
+# Error: can't open file 'nonexistent.py'
+```
+
+K8s будет перезапускать с экспоненциальным backoff (10с, 20с, 40с...). Верни манифест и применяй снова.
+
+**Поломка 2 — Resource limits**
+
+Установи `limits.memory: "10Mi"` — слишком мало для Python. Примени. Pod будет получать `OOMKilled`:
+
+```bash
+kubectl describe pod <name> -n bulletin-board
+# Reason: OOMKilled
+# Exit Code: 137
+```
+
+**Поломка 3 — Liveness probe убивает Pod**
+
+Измени `livenessProbe.path` на `/api/nonexistent`. Примени. Pod будет регулярно рестартовать потому что probe всегда падает:
+
+```bash
+kubectl get pods -n bulletin-board
+# RESTARTS: 5
+
+kubectl describe pod <name> -n bulletin-board
+# Warning  Unhealthy  Liveness probe failed: HTTP probe failed with statuscode: 404
+```
 
 ---
 
@@ -1022,40 +1019,6 @@ minikube delete
 **Почему в проде базу часто выносят из кластера вообще.** Managed DB (RDS, Cloud SQL, Yandex Managed PostgreSQL) даёт бэкапы с point-in-time recovery, репликацию, failover и обновления версий — чужими руками и с SLA. Самостоятельно поднять это в кластере — недели работы и постоянная эксплуатационная нагрузка (поэтому если уж в кластере — то через операторы вроде CloudNativePG, а не голым StatefulSet). Кластер прекрасен для stateless-приложений: Pod-ы можно убивать и двигать. База — это ровно то, что убивать и двигать больно.
 
 **Упражнение (опционально):** переведи Postgres на StatefulSet — `kind: StatefulSet`, добавь `serviceName: postgres`, замени PVC на `volumeClaimTemplates`, сделай Service headless (`clusterIP: None`). Затем удали Pod и сравни с Deployment: имя Pod-а сохранится (`postgres-0`), PVC будет называться `storage-postgres-0`, DNS-имя `postgres-0.postgres` — постоянное.
-
----
-
-## На собеседовании спросят
-
-**Q: Почему Postgres у вас Deployment, а не StatefulSet? Когда нужен StatefulSet?**
-A: Одна реплика + один PVC — гарантии StatefulSet ничего не добавляют. StatefulSet нужен при нескольких stateful-репликах: стабильные имена/DNS (postgres-0, postgres-1), свой PVC на реплику (volumeClaimTemplates), упорядоченный rollout — без этого не построить репликацию primary/standby. В проде базу чаще выносят в managed DB (см. FAQ выше).
-
-**Q: В чём разница между Pod, Deployment и ReplicaSet?**
-A: Pod — один экземпляр приложения (1-2 контейнера). ReplicaSet — следит что работает N Pod. Deployment — управляет ReplicaSet, добавляет rolling update и история ревизий. В обычной работе работают только с Deployment, ReplicaSet и Pod создаются автоматически.
-
-**Q: Что такое readiness probe и зачем она нужна?**
-A: HTTP-запрос (или TCP, или команда) который K8s делает к Pod перед тем как направить на него трафик. Пока probe не пройдена — Pod в статусе `not ready` и Service не посылает на него запросы. Это решает проблему "трафик пришёл а приложение ещё не инициализировалось".
-
-**Q: Что такое OOMKilled в Kubernetes и почему это не всегда катастрофа?**
-A: OOMKilled — Pod превысил `resources.limits.memory`, ядро Linux отправило SIGKILL (exit code 137). Kubernetes автоматически пересоздаёт Pod. Это не катастрофа если происходит редко — плохо если `RESTARTS` растёт постоянно: значит лимит занижен или есть утечка памяти. В норме `RESTARTS: 0` у всех Pod-ов.
-
-**Q: Как работает HPA?**
-A: Раз в 15 секунд HPA запрашивает metrics-server, сравнивает текущее использование CPU/memory с целевым (`targetCPUUtilizationPercentage`). Если превышено — добавляет реплики (до `maxReplicas`). Scale down медленнее: ждёт 5 минут стабильно низкой нагрузки.
-
-**Q: Зачем Namespace?**
-A: Изолированное пространство имён внутри кластера. В одном кластере могут жить dev/staging/prod в разных namespace. Политики, RBAC, resource quotas применяются на уровне namespace. В нашем проекте `bulletin-board` — namespace для изоляции от других приложений.
-
-**Q: Чем K8s Secret отличается от ConfigMap?**
-A: ConfigMap — открытые данные (URL, порты, feature flags). Secret — чувствительные данные (пароли, токены). Технически Secret хранится в base64 (не зашифрован по умолчанию!) — разница больше семантическая и в access control (RBAC).
-
-**Q: В чём разница Rolling Update, Blue-Green и Canary?**
-A: Rolling: обновляет Pod-ы по одному, две версии работают одновременно, откат = новый деплой (медленно). Blue-Green: два полных окружения, переключение selector = мгновенный откат, удвоение ресурсов. Canary: малый процент трафика на новую версию, безопасное тестирование на реальных пользователях, градуальное увеличение.
-
-**Q: Как реализовать Blue-Green в Kubernetes без платных инструментов?**
-A: Два Deployment (backend-blue, backend-green). Service с selector `{app: backend, color: blue}`. При деплое: создаём green Deployment, ждём readiness, переключаем selector: `kubectl patch service`. Rollback: patch обратно на blue. Минута работы.
-
-**Q: Как canary deployment защищает от инцидентов?**
-A: При gradual rollout (canary replicas=1, stable=4) только 20% пользователей попадают на новую версию. Если новая версия деградирует — это видно на метриках canary Pod-ов до того как затронет всех. Rollback = `kubectl delete deployment backend-canary`. Без canary: инцидент затрагивает 100% сразу.
 
 ---
 

@@ -1,24 +1,7 @@
 # Уровень 4 (GitLab) — Self-hosted GitLab CE + GitLab CI/CD
 
-> **Тип сессии:** разделы «Зачем», «Аналогия», «Как это работает», «На собеседовании спросят», Security Block — **[голова]**: можно читать в дороге, без терминала. Шаги с командами, «Что сломать намеренно», Troubleshooting на живой поломке — **[руки]**: нужна домашняя сессия с VM. Легенда — в START_HERE.md.
-
-## Зачем начинать отсюда?
-
-GitHub Actions — удобный облачный сервис. Но в реальных компаниях (банки, госструктуры, enterprise) часто поднимают **self-hosted GitLab**: их код не должен уходить на сторонние серверы, им нужен полный контроль над данными и инфраструктурой.
-
-Ты должен уметь работать с обоими. GitLab CI — один из наиболее распространённых CI/CD инструментов в enterprise.
-
-**Что получаем в одном инструменте:**
-- Git-репозиторий с кодом
-- Container Registry (как ghcr.io, только свой)
-- CI/CD pipelines (`.gitlab-ci.yml`)
-- Issue Tracker, Wiki, Merge Requests
-- Environments — история деплоев с возможностью rollback
-
-## Аналогия
-
-GitHub Actions — снимать офис в коворкинге: удобно, быстро, но здание не твоё.
-Self-hosted GitLab — купить офис: больше ответственности, но полный контроль.
+> **Это [руки]** — практический маршрут уровня: команды, эксперименты, поломки. Нужна сессия с VM (минимум 4GB RAM).
+> **Теория уровня — в `CURRICULUM.md` → «Уровень 4»**: зачем CI/CD, анатомия `.github/workflows/deploy.yml` и `.gitlab-ci.yml`, сравнение GitLab CI vs GitHub Actions, вопросы с собеседований. Здесь она не дублируется. Легенда `[голова]`/`[руки]` — в START_HERE.md.
 
 ## Требования к VM
 
@@ -312,7 +295,9 @@ GitLab → **Deployments → Environments → production**
 
 ---
 
-## Шаг 12 — Сломать pipeline намеренно
+## Шаг 12 — Что сломать намеренно — Уровень 4
+
+**Поломка 1 — Сломать код (CI должен остановить деплой)**
 
 ```bash
 echo "BROKEN = )(" >> ~/devops-project/level-3-caching/backend/main.py
@@ -331,6 +316,18 @@ git push gitlab main
 
 Новый pipeline — зелёный, код починен.
 
+**Поломка 2 — Сломать Dockerfile**
+
+Добавь синтаксическую ошибку в `level-3-caching/backend/Dockerfile` (это реальный build-контекст пайплайна). Запушь. Pipeline должен упасть на стадии `build` — тесты прошли, но образ не собрался. Верни и запушь снова.
+
+**Поломка 3 — Симуляция ошибки деплоя**
+
+В `.gitlab-ci.yml` добавь `exit 1` в начало script у `deploy-prod`. Запушь и запусти деплой. Pipeline падает. Твои пользователи видят старую (рабочую) версию — rolling update не начался. Верни.
+
+**Поломка 4 — Деплой без rolling update**
+
+Измени деплой-скрипт на: `docker compose down && docker compose up -d`. Запусти k6 во время деплоя. Увидишь 100% ошибок пока сервис перезапускается — вот от чего спасает rolling update.
+
 ---
 
 ## Шаг 13 — Остановить GitLab
@@ -346,17 +343,17 @@ docker compose down -v
 
 ---
 
-## Сравнение GitLab CI vs GitHub Actions
+## Справочник команд — Уровень 4
 
-| | GitHub Actions | GitLab CI |
-|--|--|--|
-| Где хранится pipeline | `.github/workflows/*.yml` | `.gitlab-ci.yml` в корне |
-| Registry | ghcr.io (отдельно) | Встроен в GitLab |
-| Runner | GitHub-managed (бесплатно) | Свой runner (настраиваешь сам) |
-| Переменные | Secrets в GitHub Settings | Variables в GitLab Settings |
-| Approval для деплоя | Environment protection rules | `when: manual` или approval |
-| Merge Request | Pull Request | Merge Request |
-| История деплоев | Deployments tab | Environments |
+| Команда | Описание |
+|---------|---------|
+| `docker compose exec gitlab cat /etc/gitlab/initial_root_password` | Начальный пароль root |
+| `./runner/register.sh <RUNNER_TOKEN>` | Зарегистрировать runner |
+| `docker compose pull && docker compose up -d --no-deps backend_1` | Обновить только один сервис |
+| `git push gitlab main` | Запушить в self-hosted GitLab (второй remote) |
+| `git tag v1.2.3 && git push --tags` | Создать тег (триггер для release pipeline) |
+| `docker images \| grep bulletin` | Список образов с тегами |
+| `trivy image --severity HIGH,CRITICAL --exit-code 1 <image>` | Блокирующая проверка на CVE |
 
 ---
 
@@ -371,22 +368,6 @@ docker compose down -v
 **Pipeline запущен, но job не берётся** → Нет доступного runner. Проверь в GitLab → Settings → Runners что runner онлайн (зелёная точка). Проверь что tag job совпадает с тегом runner.
 
 **"Merge request pipeline failed but I want to merge"** → В settings можно отключить обязательность прохождения pipeline, но не нужно. Починить тесты.
-
----
-
-## На собеседовании спросят
-
-**Q: Зачем нужен Container Registry и почему не хранить образы на сервере?**
-A: Сервер ephemeral — он может упасть. Registry — персистентное хранилище. При rolling update нужно скачать образ с registry на 3 разных сервера. Без registry нужно строить образ на каждом сервере отдельно.
-
-**Q: Что такое Docker-in-Docker и зачем он нужен в CI?**
-A: Наш runner сам работает в Docker-контейнере. Чтобы внутри него делать `docker build`, нужен доступ к Docker daemon. DinD (Docker in Docker) запускает отдельный Docker daemon внутри контейнера. Альтернатива — монтировать `/var/run/docker.sock` с хоста (проще, но менее безопасно).
-
-**Q: Что такое "Protected branch" и зачем?**
-A: Ветка куда нельзя пушить напрямую — только через Merge Request. Это обеспечивает: code review перед мержем, обязательное прохождение CI, аудит кто и что менял.
-
-**Q: Как организовать деплой в несколько окружений (dev/staging/prod)?**
-A: Разные jobs с разными `environment:` и разными условиями запуска. Dev: автоматически при push в feature-ветку. Staging: автоматически при мерже в main. Prod: `when: manual` после approve.
 
 ---
 

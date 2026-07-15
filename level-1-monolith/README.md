@@ -1,22 +1,9 @@
 # Уровень 1 — Монолит: первый живой сервис
 
-> **Тип сессии:** разделы «Зачем», «Аналогия», «Как это работает», «На собеседовании спросят», Security Block — **[голова]**: можно читать в дороге, без терминала. Шаги с командами, «Что сломать намеренно», Troubleshooting на живой поломке — **[руки]**: нужна домашняя сессия с VM. Легенда — в START_HERE.md.
+> **Это [руки]** — практический маршрут уровня: команды, эксперименты, поломки. Нужна сессия с VM.
+> **Теория уровня — в `CURRICULUM.md` → «Уровень 1»**: зачем всё это, анатомия Dockerfile / docker-compose.yml / nginx.conf, вопросы с собеседований. Читай её до или параллельно — здесь она не дублируется. Легенда `[голова]`/`[руки]` — в START_HERE.md.
 
-## Зачем начинать отсюда?
-
-Нельзя понять зачем нужен Kubernetes не увидев сначала боль от одного контейнера.
-Нельзя оценить Redis не почувствовав как база данных задыхается.
-
-Мы начинаем с самой простой рабочей конфигурации — не потому что она правильная, а потому что она понятная. Каждый следующий уровень будет добавлять сложность только тогда, когда ты лично увидишь проблему которую эта сложность решает.
-
-## Аналогия
-
-Представь кафе. Уровень 1 — это один повар, одна касса, один столик с меню.
-Всё работает пока посетителей мало. Когда очередь вырастает — повар не справляется.
-Следующие уровни: нанимаем второго повара (масштабирование), добавляем кэшир (Redis),
-пишем автоматизацию для найма (CI/CD).
-
-## Архитектура
+## Архитектура — карта уровня
 
 ```
 Браузер
@@ -29,11 +16,7 @@
                                                        PostgreSQL :5432
 ```
 
-**Почему именно такая схема?**
-- Nginx перед бэкендом — потому что Python-серверы (uvicorn) плохо справляются с раздачей статики и медленными клиентами. Nginx держит тысячи соединений асинхронно.
-- PostgreSQL отдельно от бэкенда — потому что данные должны переживать перезапуск приложения.
-
-## Что нового в этой версии (v2)
+**Что нового в этой версии (v2):**
 
 | Раньше | Сейчас |
 |--------|--------|
@@ -44,7 +27,64 @@
 
 ---
 
-## Шаг 1 — Разобрать структуру (не запускать пока)
+## 1.1 — Практика: один контейнер, ничего лишнего
+
+> Теория: CURRICULUM → «1.1 — Один контейнер» (анатомия Dockerfile, слои, кэш, non-root, ENTRYPOINT vs CMD).
+
+**Шаг 1 — Запустить один контейнер с FastAPI**
+
+```bash
+cd level-1-monolith
+
+# Собрать образ
+docker build -t bulletin-backend ./backend
+
+# Запустить контейнер
+docker run -d \
+  --name my-backend \
+  -p 8000:8000 \
+  -e DATABASE_URL="sqlite:///./test.db" \
+  bulletin-backend
+
+# Проверить что работает
+curl http://localhost:8000/api/health
+# {"status": "ok"}
+```
+
+**Что увидишь:** ответ от FastAPI — приложение работает без установки Python локально.
+
+**Почему это важно:** образ `bulletin-backend` можно передать на любой сервер — он запустится ровно так же.
+
+**Шаг 2 — Изучить что внутри**
+
+```bash
+# Зайти "как в SSH" внутрь работающего контейнера
+docker exec -it my-backend bash
+
+# Внутри контейнера:
+whoami          # appuser — не root
+python3 --version
+ls /app
+cat /app/main.py
+exit
+```
+
+**Шаг 3 — Остановить**
+
+```bash
+docker stop my-backend
+docker rm my-backend
+```
+
+> **Как в проде:** никогда не запускают один контейнер напрямую через `docker run` в production — используют оркестратор (Docker Compose, Kubernetes). Прямой запуск — только для отладки и изучения.
+
+---
+
+## 1.2 — Практика: Compose-стек с PostgreSQL
+
+> Теория: CURRICULUM → «1.2 — Добавляем PostgreSQL» (анатомия docker-compose.yml: healthcheck, volumes, restart-политики, networks).
+
+**Шаг 1 — Разобрать структуру (не запускать пока)**
 
 ```
 level-1-monolith/
@@ -74,45 +114,18 @@ level-1-monolith/
 **Прочитай `docker-compose.yml` и найди ответы:**
 1. По какому `condition` бэкенд ждёт postgres?
 2. Что такое `healthcheck` и почему он нужен?
-3. Зачем `postgres_data` объявлен в `volumes:` внизу файла?
+3. Зачем `postgres_data` объявлен в `volumes:` внизу файла? Что происходит с данными при `docker compose down`?
 
----
-
-## Шаг 2 — Понять Dockerfile
+**Шаг 2 — Запустить стек**
 
 ```bash
-cat backend/Dockerfile
-```
-
-**Обрати внимание:**
-- `RUN useradd --create-home appuser` — создаём пользователя
-- `USER appuser` — запускаем процесс НЕ от root
-
-**Почему это важно:**
-Если в приложении есть уязвимость и злоумышленник получил выполнение кода — он окажется внутри контейнера от пользователя `appuser` без прав sudo. Это не панацея (container escape существует), но обязательная базовая практика.
-
-**Проверь как это работает:**
-```bash
-docker compose up --build -d
-docker compose exec backend whoami
-# Должен вывести: appuser
-```
-
----
-
-## Шаг 3 — Запустить
-
-```bash
-cd level-1-monolith
 docker compose up --build -d
 
 # Следить за стартом
 docker compose logs -f
 ```
 
-**Что смотреть в логах:**
-
-В логах `backend` ищи:
+**Что смотреть в логах** `backend`:
 ```
 Running database migrations...
 INFO  [alembic.runtime.migration] Running upgrade -> 001, Initial schema
@@ -120,15 +133,141 @@ Starting server...
 INFO:     Application startup complete.
 ```
 
-Это означает:
-1. Alembic запустился и применил миграцию 001
-2. Uvicorn запустил FastAPI
+Это означает: Alembic применил миграцию 001, затем Uvicorn запустил FastAPI. Если видишь `psycopg2.OperationalError: could not connect` — нормально, бэкенд ретраит каждые 2 секунды пока postgres не поднимется.
 
-Если видишь `psycopg2.OperationalError: could not connect` — нормально, бэкенд ретраит каждые 2 секунды пока postgres не поднимется.
+Проверь что процесс не под root:
+```bash
+docker compose exec backend whoami
+# Должен вывести: appuser
+```
+
+**Шаг 3 — Зайти в PostgreSQL напрямую**
+
+```bash
+docker compose exec postgres psql -U postgres -d bulletin_board
+
+# Внутри psql:
+\dt                    -- список таблиц
+\d ads                 -- структура таблицы ads
+\d users               -- структура таблицы users
+SELECT * FROM alembic_version;  -- версия миграций
+\q
+```
+
+**Шаг 4 — Проверить что данные переживают перезапуск**
+
+```bash
+# Создать объявление
+curl -s -X POST http://localhost:8000/api/ads \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Тест данных","description":"Переживёт ли перезапуск?","price":1}'
+
+# Перезапустить бэкенд (не трогая postgres)
+docker compose restart backend
+
+# Данные на месте?
+curl -s http://localhost:8000/api/ads | python3 -m json.tool
+```
+
+**Что увидишь:** объявление осталось — данные хранятся в volume `postgres_data`, не в контейнере.
+
+**Шаг 5 — Удалить данные намеренно**
+
+```bash
+docker compose down -v   # -v удаляет volumes
+docker compose up -d
+curl -s http://localhost:8000/api/ads
+# [] — пусто, данные сброшены
+```
+
+**Почему это важно:** `docker compose down` без флагов безопасен — данные сохранены. `down -v` — полный сброс. Знать разницу критично.
+
+### Что сломать намеренно — 1.2
+
+**Поломка 1 — Убрать healthcheck**
+
+Открой `docker-compose.yml`, закомментируй блок `healthcheck` у postgres и блок `condition: service_healthy` у бэкенда. Запусти `docker compose up --build -d`. Смотри логи:
+
+```bash
+docker compose logs -f backend
+```
+
+Иногда бэкенд стартует раньше postgres и падает с `could not connect to database`. Без healthcheck — нет гарантии порядка старта.
+
+**Что диагностировать:** `docker compose ps` — статус контейнеров. `docker compose logs postgres` — когда именно postgres принял соединения.
+
+**Верни:** раскомментируй и пересобери.
+
+**Поломка 2 — Неверный пароль к базе**
+
+Измени `POSTGRES_PASSWORD` в `docker-compose.yml` так, чтобы у postgres и бэкенда были разные пароли. Запусти — увидишь:
+
+```bash
+docker compose logs backend
+# sqlalchemy.exc.OperationalError: FATAL:  password authentication failed
+```
+
+**Что диагностировать:** `docker compose exec postgres psql -U postgres` — если зашёл без пароля, значит проблема в переменной бэкенда, а не в самом postgres.
+
+**Верни:** одинаковые пароли.
 
 ---
 
-## Шаг 4 — Проверить через curl
+## 1.3 — Практика: Nginx перед бэкендом
+
+> Теория: CURRICULUM → «1.3 — Добавляем Nginx» (анатомия nginx.conf: worker-модель, location, proxy_pass, заголовки X-Forwarded-*).
+
+**Шаг 1 — Прочитать конфиг Nginx**
+
+```bash
+cat nginx/nginx.conf
+```
+
+Найди и объясни:
+- Где nginx отдаёт статику сам, а где передаёт на бэкенд
+- Что означает `proxy_pass http://backend:8000`
+- Зачем `proxy_set_header Host $host`
+
+**Шаг 2 — Запустить полный стек**
+
+```bash
+docker compose up --build -d
+docker compose ps
+```
+
+Теперь все запросы идут через nginx на порт 80.
+
+**Шаг 3 — Сравнить прямой доступ и через nginx**
+
+```bash
+# Через Nginx (порт 80) — так видит браузер
+curl -v http://localhost/api/health
+# < Server: nginx/1.25.x
+
+# Напрямую к бэкенду (если проброшен 8000) — так видим только мы
+curl -v http://localhost:8000/api/health
+# < Server: uvicorn
+```
+
+**Шаг 4 — Убедиться что статика отдаётся Nginx, а не Python**
+
+```bash
+# Запросить index.html
+curl -I http://localhost/
+
+# В заголовках:
+# Server: nginx
+# Content-Type: text/html
+# — Nginx сам отдал файл, не спрашивая Python
+```
+
+---
+
+## 1.4 — Практика: JWT и миграции
+
+> Теория: CURRICULUM → «1.4 — Полный монолит» и вопрос про JWT в «На собеседовании спросят».
+
+**Шаг 1 — Полный цикл работы с API**
 
 ```bash
 # Здоровье сервиса
@@ -163,9 +302,7 @@ curl -s -X POST http://localhost/api/ads \
 # {"detail":"Authentication required"}
 ```
 
----
-
-## Шаг 5 — Разобрать JWT
+**Шаг 2 — Разобрать JWT**
 
 ```bash
 # JWT состоит из трёх частей разделённых точкой: header.payload.signature
@@ -184,11 +321,9 @@ echo $TOKEN | cut -d'.' -f2 | base64 -d 2>/dev/null | python3 -m json.tool
 
 **Важно:** payload виден любому кто держит токен. Поэтому в JWT **нельзя** хранить пароли, карточные данные, секреты.
 
-**Задание:** Измени `SECRET_KEY` в docker-compose.yml, перезапусти бэкенд и попробуй использовать старый токен. Что произойдёт? Почему?
+**Задание:** `SECRET_KEY` читается из переменной окружения с дефолтом `dev-only-change-in-production` (`auth.py`) — в docker-compose.yml её сейчас нет вообще. Добавь `SECRET_KEY: some-other-value` в `environment:` бэкенда, перезапусти, попробуй использовать старый токен. Что произошло и почему?
 
----
-
-## Шаг 6 — Разобрать Alembic
+**Шаг 3 — Разобрать Alembic**
 
 ```bash
 # Зайти в контейнер бэкенда
@@ -204,23 +339,11 @@ alembic upgrade head --sql
 exit
 ```
 
-```bash
-# Зайти в PostgreSQL и посмотреть что создалось
-docker compose exec postgres psql -U postgres -d bulletin_board
-
-# Внутри psql:
-\dt                     -- список таблиц
-\d ads                  -- структура таблицы ads
-\d users                -- структура таблицы users
-SELECT * FROM alembic_version;  -- текущая версия миграций
-\q
-```
-
-**Что видишь:** таблица `alembic_version` — Alembic хранит здесь текущую версию миграций. При следующем запуске он сравнивает её с файлами в `versions/` и применяет только новые.
+**Что видишь:** таблица `alembic_version` в базе (смотрел её в 1.2, Шаг 3) — Alembic хранит там текущую версию миграций. При следующем запуске он сравнивает её с файлами в `versions/` и применяет только новые.
 
 ---
 
-## Шаг 7 — Нагрузочный тест (ломаем)
+## Нагрузочный тест — видим боль
 
 ```bash
 # Терминал 1: смотрим потребление ресурсов
@@ -247,7 +370,7 @@ k6 run load-tests/stress.js
 
 ---
 
-## Шаг 7.5 — OOM Killer: что происходит когда память кончается
+## OOM Killer: что происходит когда память кончается
 
 **OOM Killer** (Out of Memory Killer) — механизм ядра Linux который убивает процессы когда система исчерпала физическую память. В Docker он работает через cgroups: контейнеру установлен лимит, он его превысил — ядро отправляет SIGKILL. Exit code **137** = 128 + 9 (SIGKILL).
 
@@ -328,7 +451,7 @@ docker compose up -d
 
 ---
 
-## Шаг 8 — Логи и диагностика
+## Логи и диагностика
 
 ```bash
 # Хвост логов конкретного сервиса
@@ -354,7 +477,7 @@ exit
 
 ---
 
-## Шаг 8.5 — Бэкап и восстановление PostgreSQL
+## Бэкап и восстановление PostgreSQL
 
 Данные живут в volume `postgres_data`. Volume переживает перезапуски — но не `down -v`, не умерший диск, не `DROP TABLE` уставшим вечером. **База без бэкапа — это данные, которые ты согласился потерять.** А вопрос «как вы бэкапили базы» задают почти на каждом собеседовании.
 
@@ -409,7 +532,7 @@ curl -s localhost/api/ads | head
 
 ---
 
-## Шаг 9 — Остановить и очистить
+## Остановить и очистить
 
 ```bash
 # Остановить (данные сохраняются)
@@ -426,6 +549,55 @@ docker compose down --rmi all
 
 ---
 
+## Что сломать намеренно — Уровень 1
+
+**Поломка 1 — Заполнить диск**
+
+```bash
+# Создать большой файл внутри контейнера бэкенда
+docker compose exec backend dd if=/dev/zero of=/tmp/bigfile bs=1M count=500
+
+# Что упадёт первым?
+docker compose logs backend
+# Смотри на ошибки записи, ошибки SQLite/postgres
+```
+
+**Диагностика:**
+```bash
+docker compose exec backend df -h    # место в контейнере
+docker system df                      # место занятое Docker вообще
+```
+
+**Почему это важно:** в production диск заполняют логи. Это одна из самых частых причин инцидентов.
+
+**Поломка 2 — Убить процесс внутри контейнера**
+
+```bash
+# Найти PID uvicorn
+docker compose exec backend ps aux
+
+# Убить процесс
+docker compose exec backend kill -9 <PID>
+
+# Контейнер остановится сам
+docker compose ps
+# backend   Exit 137
+```
+
+**Диагностика:** `docker compose logs backend --tail=5`. `Exit 137` = процесс убит сигналом (128 + SIGKILL=9).
+
+**Что важно знать:** Docker Compose с `restart: unless-stopped` перезапустит контейнер автоматически. Kubernetes сделает это надёжнее.
+
+**Поломка 3 — OOM Kill: выход за лимит памяти**
+
+Полный разбор — выше, раздел «OOM Killer: что происходит когда память кончается». Если пропустил его — самое время: это самая показательная поломка уровня.
+
+**Поломка 4 — Сломать миграцию**
+
+Открой `backend/alembic/versions/001_initial_schema.py`, измени `ads` на `advertisements` в CREATE TABLE. Запусти `docker compose up --build -d`. Что произойдёт с уже существующими данными? Что в логах?
+
+---
+
 ## Типичные ошибки
 
 **"port is already allocated"** → порт 80 занят. Найди кто: `sudo lsof -i :80` и останови.
@@ -438,25 +610,28 @@ docker compose down --rmi all
 
 ---
 
-## На собеседовании спросят
+## Справочник команд — Уровень 1
 
-**Q: Что такое Docker volume и зачем он нужен?**
-A: Volume — хранилище данных вне контейнера. Контейнеры ephemeral (данные теряются при удалении). Volume переживает перезапуски и удаление контейнера. PostgreSQL хранит данные в volume.
-
-**Q: Зачем Nginx перед Python-приложением?**
-A: Nginx (async, C) эффективно держит тысячи одновременных соединений, отдаёт статику, умеет gzip, rate limiting. Python-сервер (uvicorn) лучше справляется с бизнес-логикой, но плохо — с медленными клиентами.
-
-**Q: Объясни JWT. Как он работает?**
-A: Три части: header (алгоритм), payload (данные), signature (HMAC от header+payload с secret_key). Сервер проверяет подпись — если сошлась, доверяет данным из payload. Stateless: сервер не хранит сессии.
-
-**Q: Что такое OOM Killer и exit code 137?**
-A: OOM Killer — механизм ядра Linux который убивает процессы при нехватке физической памяти, отправляя им SIGKILL. Exit code 137 = 128 + 9 (SIGKILL). В Docker срабатывает при превышении `mem_limit` контейнера. В Kubernetes — при превышении `resources.limits.memory`, Pod получает статус `OOMKilled`. Без лимитов OOM Killer может убить PostgreSQL вместо утёкшего бэкенда.
-
-**Q: Что такое database migration и зачем нужен Alembic?**
-A: Migration — изменение схемы БД с историей. Alembic версионирует изменения как git — для кода. Позволяет откатиться (`downgrade`), воспроизвести схему на новой БД, синхронизировать dev/prod.
-
-**Q: Что означает `depends_on` с `condition: service_healthy` в docker-compose?**
-A: Бэкенд стартует только после того как postgres прошёл healthcheck (`pg_isready`). Без этого бэкенд может стартовать раньше postgres → коннект упадёт.
+| Команда | Описание |
+|---------|---------|
+| `docker build -t bulletin-backend ./backend` | Собрать образ бэкенда |
+| `docker run -d -p 8000:8000 bulletin-backend` | Запустить один контейнер в фоне |
+| `docker logs my-backend` | Логи одиночного контейнера |
+| `docker stop my-backend && docker rm my-backend` | Остановить и удалить одиночный контейнер |
+| `docker compose up --build -d` | Собрать и запустить все контейнеры |
+| `docker compose ps` | Статус всех контейнеров |
+| `docker compose logs -f backend` | Следить за логами бэкенда |
+| `docker compose logs -t` | Логи всех сервисов с метками времени |
+| `docker compose exec backend bash` | Зайти внутрь контейнера |
+| `docker compose exec postgres psql -U postgres -d bulletin_board` | Зайти в PostgreSQL |
+| `docker compose restart backend` | Перезапустить только бэкенд |
+| `docker compose down` | Остановить, данные сохранить |
+| `docker compose down -v` | Остановить, данные удалить |
+| `docker stats` | Мониторинг CPU/RAM контейнеров |
+| `docker system df` | Место занятое Docker |
+| `docker system prune` | Очистить неиспользуемые образы и контейнеры |
+| `k6 run load-tests/smoke.js` | Лёгкий дым-тест |
+| `k6 run load-tests/stress.js` | Стресс-тест |
 
 ---
 
@@ -470,6 +645,7 @@ A: Бэкенд стартует только после того как postgre
 - [ ] Запустить нагрузочный тест и читать его вывод
 - [ ] Видеть деградацию под нагрузкой
 - [ ] Объяснить зачем Nginx перед бэкендом
+- [ ] Сделать бэкап базы и восстановиться из него
 
 **Боль уровня 1:** один бэкенд не справляется → Уровень 2.
 
@@ -636,6 +812,24 @@ docker compose exec postgres pg_isready -U postgres
 # /var/run/postgresql:5432 - accepting connections
 ```
 
+**5. Миграции не применились**
+
+Симптом: `curl http://localhost/api/ads` возвращает ошибку про несуществующую таблицу.
+
+```bash
+# Проверяем что entrypoint.sh отработал:
+docker compose logs backend | grep -E "migration|alembic|error"
+
+# Запустить миграции вручную:
+docker compose exec backend alembic upgrade head
+
+# Проверить текущую версию:
+docker compose exec backend alembic current
+
+# Посмотреть таблицы в базе:
+docker compose exec postgres psql -U postgres -d bulletin_board -c "\dt"
+```
+
 **6. Контейнер внезапно умирает (Exit 137)**
 
 Симптом: `docker compose ps` показывает `Exit 137`, контейнер пересоздался сам по `restart: unless-stopped`.
@@ -656,24 +850,6 @@ docker stats
 # Решение A: найди утечку (heap profiler — memory_profiler для Python)
 # Решение B: увеличь mem_limit в docker-compose.yml
 # Решение C: оптимизируй запросы — меньше данных грузить в память
-```
-
-**5. Миграции не применились**
-
-Симптом: `curl http://localhost/api/ads` возвращает ошибку про несуществующую таблицу.
-
-```bash
-# Проверяем что entrypoint.sh отработал:
-docker compose logs backend | grep -E "migration|alembic|error"
-
-# Запустить миграции вручную:
-docker compose exec backend alembic upgrade head
-
-# Проверить текущую версию:
-docker compose exec backend alembic current
-
-# Посмотреть таблицы в базе:
-docker compose exec postgres psql -U postgres -d bulletin_board -c "\dt"
 ```
 
 ---

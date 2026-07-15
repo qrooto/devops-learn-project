@@ -2212,117 +2212,25 @@ State — карта соответствия Terraform-ресурсов и ре
 
 ---
 
-### Ключевые команды
+### Ключевые концепции
 
-| Команда | Что делает | Пример |
-|---------|-----------|--------|
-| `terraform init` | Скачать провайдеры | `terraform init` |
-| `terraform plan` | Показать что изменится | `terraform plan -out=tfplan` |
-| `terraform apply` | Применить изменения | `terraform apply tfplan` |
-| `terraform destroy` | Удалить всю инфраструктуру | `terraform destroy` |
-| `terraform state list` | Список ресурсов в state | — |
-| `terraform output` | Вывести outputs | `terraform output server_ip` |
-
-### Практика
-
-**Шаг 1 — Изучить структуру**
-
-```bash
-cd level-9-terraform/environments/dev
-ls
-# main.tf            — основные ресурсы (docker_network, docker_container и т.д.)
-# variables.tf       — переменные
-# outputs.tf         — выходные значения
-# terraform.tfvars   — значения переменных для dev-окружения
+```
+Код (.tf файлы)
+    ↓ terraform plan   → показывает ЧТО изменится (не применяет)
+    ↓ terraform apply  → применяет изменения
+    ↓
+State файл (terraform.tfstate)
+    ↑ terraform читает state чтобы знать текущее состояние
+    ↑ сравнивает с кодом → вычисляет diff
 ```
 
-```bash
-cat main.tf
-```
+**State** — самое важное понятие в Terraform. Это JSON-файл где хранится информация о всех созданных ресурсах. Terraform сравнивает state с кодом → понимает что нужно создать/изменить/удалить.
 
-**Шаг 2 — Инициализация**
-
-```bash
-terraform init
-# Скачает provider kreuzwerker/docker в .terraform/
-```
-
-**Шаг 3 — План**
-
-```bash
-terraform plan
-```
-
-Увидишь что будет создано (сеть, volume, 3 образа, 3 контейнера):
-```
-+ docker_network.app
-+ docker_volume.postgres_data
-+ docker_image.postgres
-+ docker_container.postgres
-+ docker_image.backend
-+ docker_container.backend
-+ docker_image.nginx
-+ docker_container.nginx
-
-Plan: 8 to add, 0 to change, 0 to destroy.
-```
-
-**Шаг 4 — Применить**
-
-```bash
-terraform apply
-# Введи "yes"
-
-terraform output
-# app_url = "http://localhost:8088"
-```
-
-```bash
-# Убедиться что реально поднялось:
-docker ps | grep dev-
-curl http://localhost:8088
-```
-
-**Шаг 5 — Понять state**
-
-```bash
-cat terraform.tfstate   # не редактируй руками!
-terraform state list
-```
-
-State — память Terraform о том что уже создано. Если state потерян — Terraform не знает о существующих ресурсах → опасность дублирования (попробует создать всё заново, а старые контейнеры останутся висеть отдельно).
-
-`backend "local"` в этом проекте хранит state прямо в файле рядом с кодом — годится для обучения, но не для команды (см. заметку про `backend "s3"` выше).
-
-**Шаг 6 — Изменить инфраструктуру**
-
-Измени `nginx_port = 8088` на `nginx_port = 8090` в `terraform.tfvars`. Запусти `terraform plan` — увидишь, что `docker_container.nginx` будет пересоздан (смена порта требует пересоздания контейнера, не просто патч на лету). `terraform apply`, потом `curl http://localhost:8090`.
+**Почему state нельзя коммить в Git:** он содержит чувствительные данные (пароли, ключи). В команде state хранят в S3/GCS/Terraform Cloud — там он общий для всех.
 
 ---
 
-### Что сломать намеренно — Уровень 9
-
-**Поломка 1 — Потерять state**
-
-```bash
-mv terraform.tfstate terraform.tfstate.backup
-terraform plan
-# Terraform думает что ничего не создано и хочет создать всё заново!
-# В облаке это означает дублирование ресурсов и лишние деньги;
-# здесь — вторую копию контейнеров с теми же именами, apply упадёт на конфликте имён
-
-mv terraform.tfstate.backup terraform.tfstate
-```
-
-**Поломка 2 — Изменить ресурс вручную мимо Terraform**
-
-```bash
-# Останови и запусти nginx-контейнер с другим портом напрямую через Docker, в обход Terraform:
-docker stop dev-nginx
-docker rm dev-nginx
-docker run -d --name dev-nginx --network dev-bulletin-board -p 9999:80 nginx:alpine
-```
-Запусти `terraform plan`. Увидишь drift — Terraform обнаружит, что реальный контейнер не соответствует тому, что описано в `.tf` файлах, и предложит пересоздать его в исходном виде (порт из `terraform.tfvars`, а не 9999). Если применить — Terraform вернёт всё к состоянию из кода, ручное изменение будет потеряно. Именно так же ведёт себя `digitalocean_droplet` или любой другой облачный ресурс, изменённый в консоли мимо Terraform.
+> **→ Практика [руки]:** `level-9-terraform/README.md` — Шаги 1-9 (установка, init/plan/apply, изменение инфраструктуры, работа со state, destroy, remote state с MinIO и locking), «Что сломать намеренно» (потерять state, drift мимо Terraform), справочник команд, `.gitignore` для Terraform.
 
 ---
 
@@ -2330,50 +2238,37 @@ docker run -d --name dev-nginx --network dev-bulletin-board -p 9999:80 nginx:alp
 
 ---
 
-### Справочник команд — Уровень 9
-
-| Команда | Описание |
-|---------|---------|
-| `terraform init` | Инициализация: скачать провайдеры |
-| `terraform plan` | Что изменится? (dry run) |
-| `terraform apply` | Применить изменения |
-| `terraform destroy` | Удалить всё (осторожно!) |
-| `terraform state list` | Список ресурсов в state |
-| `terraform state show <resource>` | Детали ресурса в state |
-| `terraform state rm <resource>` | Удалить ресурс из state (без уничтожения) |
-| `terraform import <type>.<name> <id>` | Импортировать существующий ресурс |
-| `terraform init -migrate-state` | Переехать на новый backend |
-| `terraform force-unlock <ID>` | Снять зависший lock |
-| `terraform validate` | Проверить синтаксис .tf файлов |
-| `terraform fmt` | Автоформатирование кода |
-
 ### На собеседовании спросят
 
 **Q: Что такое Terraform State и зачем он нужен?**
-A: JSON-файл где Terraform хранит информацию о созданных ресурсах и их реальных ID. Без state Terraform не знает что уже создал и будет пытаться создать дубликаты. В команде — хранится в remote backend (S3, GCS) с locking чтобы не было конфликтов при параллельном apply.
+A: JSON-файл где Terraform хранит информацию о созданных ресурсах. Без state Terraform не знает что уже создано и будет пытаться создать всё заново. В команде хранится в удалённом backend (S3, GCS) с locking чтобы не было конфликтов.
 
-**Q: Зачем нужен remote state и как работает state locking?**
-A: Remote state решает проблему нескольких разработчиков: у каждого своя копия → расходятся → конфликт. Remote state: одна копия в S3, все работают с ней. State locking: при старте apply записывается lock в DynamoDB, другой apply получает ошибку "state locked by <user>". Без locking два параллельных apply повредят state.
+**Q: В чём разница terraform plan и terraform apply?**
+A: plan — dry run, показывает что изменится без применения. apply — применяет изменения. В prod: plan запускают в CI для ревью, apply — только после approve.
+
+**Q: Что такое idempotency в Terraform?**
+A: Можно запустить apply 100 раз — если код не изменился, ничего не произойдёт. Terraform сравнивает state с реальностью и делает только нужные изменения.
 
 **Q: Чем Terraform отличается от Ansible?**
-A: Terraform — declarative provisioning инфраструктуры (создание VM, сетей, баз). Ansible — imperative конфигурирование серверов (установка пакетов, настройка сервисов). Используются вместе: Terraform создаёт VM, Ansible её настраивает. Terraform знает о жизненном цикле ресурсов (create/update/destroy), Ansible — нет.
+A: Terraform — для создания инфраструктуры (VM, сети, storage). Ansible — для конфигурирования существующих серверов (установка пакетов, настройка сервисов). Используются вместе: Terraform создаёт VM, Ansible её настраивает.
 
-**Q: Что произойдёт если terraform.tfstate попадёт в публичный Git?**
-A: Немедленная компрометация. State содержит все атрибуты ресурсов в открытом виде: пароли БД, API-ключи, токены, IP-адреса. Нужно немедленно ротировать все credentials. Профилактика: `.gitignore` для `*.tfstate`, S3 bucket с `encrypt=true` и закрытым доступом.
+**Q: Что такое Terraform modules?**
+A: Переиспользуемые блоки конфигурации. Как функция в программировании — выносишь общую логику (например "создать VM с Nginx") в модуль, используешь в разных окружениях с разными параметрами.
 
-**Q: Что такое terraform import?**
-A: Команда для добавления существующего ресурса (созданного вне Terraform) в state. `terraform import docker_container.postgres dev-postgres` — Terraform узнаёт о существующем контейнере и начинает им управлять. Важно: код (`.tf` файл) нужно написать вручную, import только обновляет state.
+**Q: Зачем нужен remote state и как работает state locking?**
+A: Remote state хранит tfstate в облачном хранилище (S3, GCS) вместо локального файла — чтобы вся команда работала с одним актуальным state. State locking блокирует параллельные apply: первый apply записывает lock в DynamoDB, второй получает ошибку "state is locked" и ждёт. Без locking два параллельных apply создадут конфликтующие изменения и повредят state.
+
+**Q: Что будет если terraform.tfstate попадёт в публичный репозиторий?**
+A: Немедленная компрометация: state содержит пароли баз данных, API-ключи, connection strings и другие секреты в открытом виде. Нужно сразу ротировать все credentials, которые были в state. Поэтому state — всегда в `.gitignore`, в S3 с `encrypt=true`, доступ — только для CI/CD сервис-аккаунта.
+
+**Q: Как импортировать существующий ресурс в Terraform?**
+A: `terraform import <resource_type>.<name> <real_id>`. Например, если контейнер создан вручную: `terraform import docker_container.postgres dev-postgres`. После импорта ресурс появится в state, но код (`.tf` файл) нужно написать вручную — Terraform не генерирует код автоматически (в новых версиях есть `terraform plan -generate-config-out`, но это экспериментально).
+
+---
 
 ### Итог уровня 9
 
-Ты умеешь:
-- [ ] Написать Terraform конфигурацию (provider, resource, variable, output)
-- [ ] Читать `terraform plan` и понимать `+`, `~`, `-` изменения
-- [ ] Объяснить что такое state и почему он важен
-- [ ] Настроить remote state backend с locking (MinIO локально или S3 в prod)
-- [ ] Мигрировать local state в remote через `terraform init -migrate-state`
-- [ ] Импортировать существующий ресурс через `terraform import`
-- [ ] Убедиться что `*.tfstate` не в Git
+Чеклист умений, Best Practices Checklist и коммит — в `level-9-terraform/README.md`. Пройди их перед переходом.
 
 **Боль которую ты чувствуешь:** Terraform создал инфраструктуру, но настройка каждого сервера — ещё несколько часов ручной работы по SSH. → Уровень 10: Ansible.
 
@@ -2586,116 +2481,44 @@ ansible-playbook playbooks/site.yml --vault-password-file ~/.vault_pass
 
 ---
 
-### Ключевые команды
+### Ключевые принципы
 
-| Команда | Что делает | Пример |
-|---------|-----------|--------|
-| `ansible all -m ping` | Проверить связь с серверами | `ansible web -m ping` |
-| `ansible-playbook <file>` | Запустить плейбук | `ansible-playbook deploy.yml` |
-| `ansible-playbook --check` | Dry run (что изменится) | `ansible-playbook deploy.yml --check` |
-| `ansible-playbook --diff` | Показать diff файлов | `ansible-playbook deploy.yml --diff` |
-| `ansible-vault create` | Создать зашифрованный файл с секретами | `ansible-vault create inventory/group_vars/all/vault.yml` |
+**Идемпотентность** — запусти плейбук 10 раз, результат тот же что после первого. Ansible перед каждым действием проверяет: "а вдруг уже сделано?" Если Docker уже установлен — не устанавливает снова.
 
-### Практика
+**Декларативность** — описываешь ЧТО должно быть, не КАК этого достичь. Ты пишешь `docker: state=present`, а Ansible сам разберётся как установить Docker на Ubuntu vs CentOS.
 
-**Шаг 1 — Inventory: список серверов**
+**Agentless (без агентов)** — на управляемых серверах не нужно ничего дополнительно устанавливать. Ansible использует SSH (или WinRM на Windows).
 
-```bash
-cd level-10-ansible
-cat inventory/hosts.ini
-```
-По умолчанию там только `[local] localhost ansible_connection=local` — работаем с самим собой, `[webservers]` закомментирован (см. Анатомию выше).
-
-**Шаг 2 — Проверить связь**
-
-```bash
-ansible all -m ping
-```
-
-```
-localhost | SUCCESS => {"ping": "pong"}
-```
-
-**Шаг 3 — Изучить главный плейбук**
-
-```bash
-cat playbooks/site.yml
-```
-Он ссылается на 4 роли по порядку: `common` (базовые пакеты, таймзона, deploy-пользователь) → `docker` (установка Docker Engine из официального репозитория) → `tools` (k6, kubectl, helm) → `app` (git clone + `docker compose up`, только если `deploy_app=true`).
-
-```bash
-cat playbooks/roles/common/tasks/main.yml
-cat playbooks/roles/docker/tasks/main.yml
-```
-
-**Шаг 4 — Аудит состояния сервера (ещё ничего не меняя)**
-
-```bash
-ansible-playbook playbooks/check.yml
-```
-Покажет ОС, память, диск и статус Docker через `ansible_distribution`/`ansible_memtotal_mb`/`ansible_mounts` — те самые факты, которые Ansible собрал через `gather_facts: true`.
-
-**Шаг 5 — Dry run основного плейбука**
-
-```bash
-ansible-playbook playbooks/site.yml --check --diff --tags common,docker
-```
-Покажет что изменится — без реальных изменений. Тегами `common,docker` ограничиваем прогон только базовой настройкой, не трогая `tools`/`app`.
-
-**Шаг 6 — Применить**
-
-```bash
-ansible-playbook playbooks/site.yml --tags common,docker
-```
-
-Чтобы сразу задеплоить и приложение (роль `app` пропускается по умолчанию):
-```bash
-ansible-playbook playbooks/deploy.yml -e "app_level=level-2-scaling"
-```
-
-**Шаг 7 — Ansible Vault для секретов**
-
-```bash
-ansible-vault create inventory/group_vars/all/vault.yml
-# внутри: vault_postgres_password: "...", vault_jwt_secret: "..."
-
-ansible-playbook playbooks/site.yml --ask-vault-pass
-```
-
-**Шаг 8 — Роли: организация плейбуков**
-
-```bash
-ls playbooks/roles/
-# common/   — apt update, базовые пакеты, таймзона, deploy-пользователь
-# docker/   — Docker Engine из официального репозитория (не из apt Ubuntu — там старая версия)
-# tools/    — k6, kubectl, helm
-# app/      — git clone/pull + docker compose up
-```
-
-Роли — модульный способ организации задач. Можно переиспользовать: роль `docker` в этом виде подойдёт для любого проекта, не только для доски объявлений.
-
----
-
-### Что сломать намеренно — Уровень 10
-
-**Поломка 1 — Сломанный таск**
-
-Добавь таск с несуществующим модулем:
-```yaml
-- name: This will fail
-  nonexistent_module:
-    param: value
-```
-
-Запусти. Ansible упадёт на этом таске. Остальные серверы/таски не затронуты.
-
-**Поломка 2 — Идемпотентность**
-
-Запусти плейбук дважды. Второй раз все таски должны показать `ok` или `changed: 0` — ничего лишнего не произошло. Это фундаментальное свойство Ansible.
+> **→ Практика [руки]:** `level-10-ansible/README.md` — Шаги 1-9 (установка, инвентарь, ad-hoc команды, аудит сервера, основной плейбук, деплой приложения, роли, Ansible Vault, multi-server), «Что сломать намеренно» (сломанный таск, проверка идемпотентности), справочник команд.
 
 ---
 
 > **Как в проде:** Ansible запускается в CI/CD после Terraform: сначала создаём инфраструктуру (Terraform), потом настраиваем серверы (Ansible). AWX / Ansible Tower — веб-интерфейс для запуска плейбуков с логами, расписанием, RBAC. Galaxy — репозиторий ролей как Docker Hub: готовые роли для nginx, postgres, redis.
+
+---
+
+### На собеседовании спросят
+
+**Q: В чём разница Ansible и Terraform?**
+A: Terraform создаёт инфраструктуру (VM, сети, storage в облаке). Ansible настраивает существующие серверы (устанавливает пакеты, разворачивает приложения). В реальных проектах используются вместе: Terraform создаёт VM, Ansible настраивает.
+
+**Q: Что такое идемпотентность и почему она важна?**
+A: Результат одинаков при любом количестве повторных запусков. Важно потому что в production нельзя рисковать: если что-то пошло не так и плейбук прервался на середине — можно запустить снова, он доделает остаток не ломая уже сделанное.
+
+**Q: Чем отличается push-модель (Ansible) от pull-модели (Puppet/Chef)?**
+A: Push: управляющая машина сама подключается к агентам и применяет конфигурацию. Pull: агент на сервере сам периодически обращается к серверу конфигурации за обновлениями. Push проще для старта, pull лучше масштабируется на тысячи серверов и самовосстанавливается.
+
+**Q: Что такое handler в Ansible и когда он запускается?**
+A: Handler — задача которая запускается только если другая задача вызвала `notify`. Классический пример: рестарт nginx только если изменился конфиг. Handlers запускаются в конце play, даже если notify был вызван несколько раз — handler выполнится один раз.
+
+**Q: Как Ansible хранит состояние?**
+A: Никак. В отличие от Terraform, Ansible не имеет state-файла. Он проверяет текущее состояние системы каждый раз при запуске. Это упрощает архитектуру, но означает что нельзя узнать "что Ansible изменял" без его повторного запуска.
+
+---
+
+### Итог уровня 10
+
+Чеклист умений, Best Practices Checklist и коммит — в `level-10-ansible/README.md`. Это финальный уровень основного пути — дальше «Карта прогрессии боли» ниже покажет весь пройденный маршрут.
 
 ---
 

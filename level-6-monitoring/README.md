@@ -1,31 +1,7 @@
-# Уровень 6 — Observability: Prometheus + Grafana + Loki
+# Уровень 6 — Observability: Prometheus, Grafana, Loki
 
-> **Тип сессии:** разделы «Зачем», «Аналогия», «Как это работает», «На собеседовании спросят», Security Block — **[голова]**: можно читать в дороге, без терминала. Шаги с командами, «Что сломать намеренно», Troubleshooting на живой поломке — **[руки]**: нужна домашняя сессия с VM. Легенда — в START_HERE.md.
-
-## Зачем начинать отсюда?
-
-До этого мы видели проблемы только когда они уже случились: пользователи пишут что сайт не работает → идём смотреть логи. Это **реактивный** подход.
-
-В production нужен **проактивный**: алерт в Telegram/Slack за 5 минут до того как пользователи начнут жаловаться. Видеть тренды: "latency растёт последние 30 минут, надо разобраться".
-
-## Три кита observability
-
-```
-                    ┌─ Metrics (Prometheus + Grafana)
-Observability ──────┤  "Сколько запросов? Какое время ответа? Сколько ошибок?"
-                    │
-                    ├─ Logs (Loki + Promtail + Grafana)
-                    │  "Что именно происходило в 14:32:15?"
-                    │
-                    └─ Traces (OpenTelemetry — не строим, но знай)
-                       "Как конкретный запрос прошёл через все сервисы?"
-```
-
-**Метрики** — числа во времени: RPS=150, latency_p95=120ms, errors=2%.
-**Логи** — текстовые события: `2025-01-01 14:32:15 POST /api/ads 201 45ms`.
-**Трейсы** — граф запроса: nginx (2ms) → backend (40ms) → postgres (35ms) → redis (1ms).
-
-Без всего этого — ты слепой.
+> **Это [руки]** — практический маршрут уровня: команды, эксперименты, поломки. Нужна сессия с VM.
+> **Теория уровня — в `CURRICULUM.md` → «Уровень 6»**: три кита observability, анатомия prometheus.yml и alerting rules, типы метрик, вопросы с собеседований. Здесь она не дублируется. Легенда `[голова]`/`[руки]` — в START_HERE.md.
 
 ## Архитектура
 
@@ -490,6 +466,67 @@ docker compose down -v  # удалить volumes (данные)
 
 ---
 
+## Что сломать намеренно — Уровень 6
+
+**Поломка 1 — Симуляция memory leak**
+
+Готового эндпоинта для этого в проекте нет — добавь временно в `backend/main.py` (рядом с другими `@app.get`):
+```python
+_leak: list[bytes] = []
+
+@app.get("/api/debug/leak")
+def debug_leak():
+    _leak.append(b"x" * 10_000_000)  # +10 МБ в процессе на каждый вызов, никогда не освобождается
+    return {"leaked_chunks": len(_leak)}
+```
+Пересобери backend (`docker compose up --build -d`), потом вызови эндпоинт много раз:
+```bash
+for i in $(seq 1 100); do
+  docker compose exec backend_1 curl -s localhost:8000/api/debug/leak > /dev/null
+done
+```
+
+Смотри в Grafana: `container_memory_usage_bytes{name="backend_1"}` — медленно растёт. Именно так это выглядит в production — сначала незаметно, через несколько часов OOMKill.
+
+**Поломка 2 — Убить Prometheus**
+
+```bash
+docker compose stop prometheus
+# Grafana теперь показывает "No data"
+docker compose start prometheus
+# Через 15 секунд метрики восстанавливаются — Prometheus начинает scrape
+```
+
+**Диагностика:** Prometheus → Status → Targets — видно какие сервисы он scraping и когда последний раз.
+
+**Поломка 3 — Потерять логи**
+
+```bash
+docker compose stop promtail
+# Запусти нагрузку
+k6 run load-tests/smoke.js
+# Logи за это время не попадут в Loki
+docker compose start promtail
+# Loki покажет дыру во времени
+```
+
+---
+
+## Справочник команд — Уровень 6
+
+| Команда | Описание |
+|---------|---------|
+| `docker compose exec backend_1 curl -s localhost:8000/metrics` | Метрики бэкенда (не проксируются через nginx) |
+| `curl http://localhost:9090` | Prometheus UI |
+| `curl http://localhost:3000` | Grafana |
+| `rate(http_requests_total[5m])` | PromQL: RPS |
+| `histogram_quantile(0.95, rate(..._bucket[5m]))` | PromQL: p95 latency |
+| `{container=~"backend.*"} \|= "ERROR"` | LogQL: ошибки в логах |
+| `docker compose logs promtail` | Логи агента сбора логов |
+| `curl -I http://localhost/api/health` | X-Request-ID в заголовках ответа |
+
+---
+
 ## Типичные ошибки
 
 **Prometheus Target "DOWN"** → Проверь что бэкенд доступен по адресу указанному в prometheus.yml. Внутри Docker-сети имена контейнеров — это DNS. `backend_1:8000`, не `localhost:8000`.
@@ -499,34 +536,6 @@ docker compose down -v  # удалить volumes (данные)
 **Loki "No logs found"** → Promtail нужен доступ к `/var/lib/docker/containers`. В docker-compose.yml должен быть volume mount: `- /var/lib/docker/containers:/var/lib/docker/containers:ro`.
 
 **Алерты не приходят** → Нужен Alertmanager. Prometheus только создаёт алерты, Alertmanager их маршрутизирует (Telegram, Slack, PagerDuty).
-
----
-
-## На собеседовании спросят
-
-**Q: Что такое observability и чем она отличается от мониторинга?**
-A: Мониторинг — ты заранее знаешь что проверять (uptim, CPU). Observability — система позволяет ответить на любой вопрос о её состоянии с помощью метрик, логов и трейсов. Можно найти причину проблемы которую ты не предвидел.
-
-**Q: Почему p95 latency важнее среднего?**
-A: Среднее маскирует хвост. Если 100 запросов заняли 10ms и 1 запрос — 1000ms, среднее = 19ms, а p95 = 1000ms. Реальный пользователь в 5% случаев ждёт секунду — это видно только в percentile.
-
-**Q: Что такое "cardinality" в Prometheus и почему это проблема?**
-A: Количество уникальных комбинаций label. Если в метрику добавить label `user_id` — для 1 миллиона пользователей будет 1 миллион time series. Prometheus хранит все в памяти — OOM. Никогда не добавляй в labels неограниченные значения (user_id, request_id).
-
-**Q: Чем Loki отличается от Elasticsearch?**
-A: Elasticsearch индексирует всё содержимое логов — полнотекстовый поиск быстрый, но требует много дискового и RAM. Loki индексирует только labels (container, job) — поиск по тексту медленнее (перебирает файлы), зато в 10x меньше ресурсов.
-
-**Q: Что такое pull vs push в мониторинге?**
-A: Pull (Prometheus): сервер мониторинга сам обходит таргеты. Прозрачно, легко добавить service discovery, таргеты не знают где Prometheus. Push (Graphite, InfluxDB): сервисы сами отправляют метрики. Лучше работает через firewall, проще для короткоживущих задач.
-
-**Q: Что такое distributed tracing и чем он отличается от логов?**
-A: Логи — события от одного сервиса в текстовом виде, разрозненные. Трейс — граф прохождения конкретного запроса через все сервисы с временем каждого шага (span). Логи отвечают на "что случилось в сервисе X", трейс — "где именно потеряно время по всей цепочке". Без трейсинга найти bottleneck в многосервисной архитектуре занимает часы; с трейсингом — секунды.
-
-**Q: Что такое OpenTelemetry и зачем он нужен?**
-A: Vendor-neutral стандарт и SDK для сбора метрик, логов и трейсов. Инструментируешь код один раз через OTel API → данные можно отправить в любой backend: Jaeger, Tempo, Datadog, New Relic. Без OTel каждый vendor требует свой SDK — при смене инструмента переписывать весь код.
-
-**Q: Что такое Correlation ID и зачем он нужен?**
-A: Уникальный ID запроса который передаётся через все сервисы и пишется в каждый лог. Без него логи от разных сервисов не связаны — непонятно какие строки относятся к одному запросу. С correlation ID: `{container=~".*"} |= "a7f3c2b1"` в Loki покажет весь путь запроса по всем сервисам.
 
 ---
 

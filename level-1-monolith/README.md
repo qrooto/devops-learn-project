@@ -506,7 +506,10 @@ crontab -e
 **Restore drill — обязательная часть.** Бэкап, из которого ни разу не восстанавливались — это не бэкап, а файл с надеждой. Проверяется только одним способом:
 
 В реальности восстановление проверяют на отдельной базе, не трогая продакшн:
-bash# Создать тестовую базу и восстановить туда
+
+
+```bash
+# Создать тестовую базу и восстановить туда
 docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE bulletin_board_test;"
 docker compose exec -T postgres psql -U postgres bulletin_board_test \
   < ~/backups/bulletin_board_*.sql

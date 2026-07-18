@@ -505,21 +505,19 @@ crontab -e
 
 **Restore drill — обязательная часть.** Бэкап, из которого ни разу не восстанавливались — это не бэкап, а файл с надеждой. Проверяется только одним способом:
 
-```bash
-# 1. Убей данные по-настоящему:
-docker compose down -v          # -v удаляет volume postgres_data
-
-# 2. Подними заново (создастся пустая база, миграции прогонятся):
-docker compose up -d
-# Дождись healthy: docker compose ps
-
-# 3. Восстанови из дампа:
-docker compose exec -T postgres psql -U postgres bulletin_board \
+В реальности восстановление проверяют на отдельной базе, не трогая продакшн:
+bash# Создать тестовую базу и восстановить туда
+docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE bulletin_board_test;"
+docker compose exec -T postgres psql -U postgres bulletin_board_test \
   < ~/backups/bulletin_board_*.sql
 
-# 4. Проверь что данные на месте:
-curl -s localhost/api/ads | head
-# и залогинься старым пользователем через фронт
+```bash
+# Проверить что данные на месте
+docker compose exec postgres psql -U postgres -d bulletin_board_test -c "SELECT COUNT(*) FROM ads;"
+
+```bash
+# Убрать тестовую базу
+docker compose exec postgres psql -U postgres -c "DROP DATABASE bulletin_board_test;"
 ```
 
 Если шаг 4 прошёл — у тебя есть бэкап. Если нет — только что ты узнал это на учебном стенде, а не при инциденте.

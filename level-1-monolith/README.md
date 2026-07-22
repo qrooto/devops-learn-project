@@ -69,7 +69,27 @@ cat /app/main.py
 exit
 ```
 
-**Шаг 3 — Остановить**
+**Шаг 3 — Создать .dockerignore**
+
+`.dockerignore` работает как `.gitignore` но для Docker — исключает файлы из контекста сборки. Без него в образ попадёт всё: `.env` с секретами, `__pycache__`, логи.
+
+```bash
+cat > backend/.dockerignore << 'EOF'
+.env
+*.log
+.git
+__pycache__
+*.pyc
+EOF
+```
+
+Проверь что лишнее не попало внутрь образа:
+```bash
+docker compose exec backend ls -la /app
+# __pycache__/ не должно быть в списке
+```
+
+**Шаг 4 — Остановить**
 
 ```bash
 docker stop my-backend
@@ -426,6 +446,10 @@ docker compose ps
 # Системный лог хоста — подтверждение от ядра:
 sudo dmesg | grep -i "killed process\|out of memory" | tail -5
 # [12345.678] Killed process 9876 (python3) total-vm:200000kB ...
+
+# Docker сам фиксирует причину:
+docker inspect <контейнер> | grep -A5 '"State"'
+# "OOMKilled": true
 ```
 
 **Шаг 5 — Сравнить exit codes**
@@ -496,6 +520,10 @@ head -40 ~/backups/bulletin_board_*.sql
 **По расписанию — cron на хосте:**
 
 ```bash
+# Если cron не установлен:
+sudo apt install -y cron
+sudo systemctl enable --now cron
+
 crontab -e
 # Каждый день в 03:00, дампы старше 7 дней удаляются:
 0 3 * * * cd ~/devops-project/level-1-monolith && docker compose exec -T postgres pg_dump -U postgres bulletin_board > ~/backups/bulletin_board_$(date +\%F).sql && find ~/backups -name "*.sql" -mtime +7 -delete
@@ -503,31 +531,30 @@ crontab -e
 
 🔒 Security: бэкап — это копия ВСЕХ данных, включая хэши паролей пользователей. Права на папку — только владелец (`chmod 700 ~/backups`), а хранить дампы нужно **вне этого хоста**: умрёт диск — умрут и база, и её «бэкап» рядом. Минимум — копируй на другую машину (`scp`/`rsync`), правильный вариант — объектное хранилище (S3/Yandex Object Storage, встретится на уровне 9).
 
-**Restore drill — обязательная часть.** Бэкап, из которого ни разу не восстанавливались — это не бэкап, а файл с надеждой. Проверяется только одним способом:
+**Restore drill — обязательная часть.** Бэкап, из которого ни разу не восстанавливались — это не бэкап, а файл с надеждой.
 
 В реальности восстановление проверяют на отдельной базе, не трогая продакшн:
-
 
 ```bash
 # Создать тестовую базу и восстановить туда
 docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE bulletin_board_test;"
 docker compose exec -T postgres psql -U postgres bulletin_board_test \
-  < ~/backups/bulletin_board_*.sql
+  < ~/backups/bulletin_board_2026-07-18_0849.sql  # указывай конкретный файл, не *
 
-```bash
 # Проверить что данные на месте
 docker compose exec postgres psql -U postgres -d bulletin_board_test -c "SELECT COUNT(*) FROM ads;"
 
-```bash
 # Убрать тестовую базу
 docker compose exec postgres psql -U postgres -c "DROP DATABASE bulletin_board_test;"
 ```
 
-Если шаг 4 прошёл — у тебя есть бэкап. Если нет — только что ты узнал это на учебном стенде, а не при инциденте.
+Если проверка прошла — у тебя есть бэкап. Если нет — только что узнал это на учебном стенде, а не при инциденте.
+
+**3-2-1 backup rule** — классика индустрии: **3** копии, **2** разных носителя, **1** удалённая (offsite). Volume на том же хосте что и база — не считается отдельной копией.
 
 **Логический vs физический бэкап (пока просто знать):**
-- **Логический** (`pg_dump`) — SQL-текст «как пересоздать базу». Переносим между версиями PostgreSQL, человекочитаем, но на больших базах медленный и держит долгую транзакцию.
-- **Физический** (`pg_basebackup`, снапшоты диска) — копия файлов данных как есть. Быстро на любых размерах, позволяет point-in-time recovery по WAL, но только та же мажорная версия PostgreSQL. Для нашей базы в мегабайты хватает pg_dump; в проде большие базы бэкапят физически.
+- **Логический** (`pg_dump`) — SQL-текст «как пересоздать базу». Переносим между версиями PostgreSQL, человекочитаем, но на больших базах медленный.
+- **Физический** (`pg_basebackup`, снапшоты диска) — копия файлов данных как есть. Быстро на любых размерах, позволяет point-in-time recovery по WAL, но только та же мажорная версия PostgreSQL.
 
 **Задание для самопроверки:** объясни, почему `docker compose down` (без `-v`) — не защита данных, и от каких трёх сценариев потери не спасает volume вообще.
 
@@ -609,6 +636,8 @@ docker compose ps
 
 **"Authentication required" при создании объявления** → JWT не передаётся. В браузере: DevTools → Network → смотри заголовок `Authorization` в запросе.
 
+**"ambiguous redirect"** при восстановлении бэкапа → `*` разворачивается в несколько файлов. Указывай конкретное имя файла.
+
 ---
 
 ## Справочник команд — Уровень 1
@@ -624,15 +653,18 @@ docker compose ps
 | `docker compose logs -f backend` | Следить за логами бэкенда |
 | `docker compose logs -t` | Логи всех сервисов с метками времени |
 | `docker compose exec backend bash` | Зайти внутрь контейнера |
+| `docker compose exec --user root backend bash` | Зайти как root |
 | `docker compose exec postgres psql -U postgres -d bulletin_board` | Зайти в PostgreSQL |
-| `docker compose restart backend` | Перезапустить только бэкенд |
+| `docker compose restart backend` | Перезапустить только бэкенд (без пересборки) |
 | `docker compose down` | Остановить, данные сохранить |
 | `docker compose down -v` | Остановить, данные удалить |
 | `docker stats` | Мониторинг CPU/RAM контейнеров |
 | `docker system df` | Место занятое Docker |
 | `docker system prune` | Очистить неиспользуемые образы и контейнеры |
+| `docker inspect <контейнер>` | Полная информация + OOMKilled, ExitCode |
 | `k6 run load-tests/smoke.js` | Лёгкий дым-тест |
 | `k6 run load-tests/stress.js` | Стресс-тест |
+| `git checkout HEAD -- <файл>` | Восстановить файл из последнего коммита |
 
 ---
 
@@ -677,15 +709,19 @@ git push origin main
 
 **3. JWT — stateless аутентификация**
 
-Сервер не хранит сессии в памяти. Токен подписан и содержит всё необходимое. Нет хранилища сессий = нет точки отказа и нет данных которые можно украсть из памяти процесса.
+Сервер не хранит сессии в памяти. Токен подписан и содержит всё необходимое. Нет хранилища сессий = нет точки отказа и нет данных которые можно украсть из памяти процесса. Горизонтальное масштабирование бесплатно — любой сервер с тем же `SECRET_KEY` проверит токен.
 
 **4. PostgreSQL недоступен снаружи**
 
-В `docker-compose.yml` у postgres нет секции `ports:` — значит порт 5432 не проброшен на хост. База доступна только внутри Docker-сети между контейнерами.
+В `docker-compose.yml` у postgres нет секции `ports:` — значит порт 5432 не проброшен на хост. База доступна только внутри Docker-сети между контейнерами. Проверить: `ss -tulpn | grep 5432` на хосте — пусто.
 
 **5. Принцип Least Privilege для базы данных**
 
 Идеальный вариант (для самостоятельного улучшения): создавать отдельного PostgreSQL-пользователя с правами только на `SELECT/INSERT/UPDATE/DELETE` для конкретной базы. Сейчас мы используем суперпользователя `postgres` — это нормально для учёбы, но не для production.
+
+**6. .dockerignore — секреты не попадают в образ**
+
+Без `.dockerignore` при сборке в образ попадает весь контекст — включая `.env` с паролями. Файл `backend/.dockerignore` исключает лишнее до того как оно окажется внутри образа.
 
 ### Как это улучшить в production
 
@@ -703,6 +739,7 @@ GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app_user;
 
 - **Запускать контейнер от root** — `USER root` в Dockerfile или его отсутствие. Большинство базовых образов запускаются от root по умолчанию. Всегда явно добавляй `USER`.
 - **Хранить `SECRET_KEY` в коде** — например, `SECRET_KEY = "mysecret123"` прямо в `main.py`. Если репозиторий публичный — это немедленная компрометация. Даже в приватном — это плохая практика: секрет должен быть отделён от кода.
+- **Отсутствие `.dockerignore`** — `.env` попадает в образ, откуда его можно извлечь через `docker inspect` или `docker cp`.
 
 ---
 
@@ -718,7 +755,7 @@ GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app_user;
 - [ ] `.dockerignore` существует и исключает `.env`, `*.log`, `.git`
 - [ ] Версии образов в `docker-compose.yml` закреплены (не `latest`)
 - [ ] Бэкап настроен по расписанию и хранится не на этом же хосте
-- [ ] Restore drill пройден: `down -v` → восстановление из дампа → данные на месте
+- [ ] Restore drill пройден: восстановление из дампа в тестовую базу → данные на месте
 
 ---
 
@@ -844,13 +881,13 @@ docker compose logs backend --tail=20
 sudo dmesg | grep -i "killed process\|out of memory" | tail -5
 # [12345.678] Killed process 9876 (python3) total-vm:150000kB rss:148000kB
 
+# Docker фиксирует причину:
+docker inspect <контейнер> | grep OOMKilled
+# "OOMKilled": true
+
 # Наблюдать рост памяти в реальном времени:
 docker stats
 # Если MEM USAGE приближается к лимиту — жди OOM Kill
-
-# Решение A: найди утечку (heap profiler — memory_profiler для Python)
-# Решение B: увеличь mem_limit в docker-compose.yml
-# Решение C: оптимизируй запросы — меньше данных грузить в память
 ```
 
 ---

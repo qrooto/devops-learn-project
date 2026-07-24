@@ -23,7 +23,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # SECRET_KEY должен быть одинаковым на всех инстансах бэкенда.
 # Передаётся через переменную окружения — никогда не хардкодить!
-SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-change-in-production")
+SECRET_KEY = os.environ["SECRET_KEY"]
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
